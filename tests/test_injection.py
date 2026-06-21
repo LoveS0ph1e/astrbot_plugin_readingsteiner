@@ -31,6 +31,43 @@ def test_build_text_profile_str():
     assert "用户是黑咖啡党" in text
 
 
+def test_build_text_everos_schema_clean_chinese():
+    """EverOS 画像 schema → 整洁中文：三段标签 + 丢弃 evidence/timestamp。"""
+    profiles = [
+        {
+            "profile_data": {
+                "summary": "用户最近迷上爬山",
+                "explicit_info": [
+                    {"category": "兴趣", "description": "迷上爬山", "evidence": "用户说X"}
+                ],
+                "implicit_traits": [
+                    {
+                        "trait": "行动力强",
+                        "description": "迅速行动",
+                        "tags": ["Work-Focused"],
+                        "evidence": "依据Y",
+                        "basis": "推断Z",
+                    }
+                ],
+                "profile_timestamp_ms": 1782062158584,
+            }
+        }
+    ]
+    text = build_text(profiles, [], None)
+    assert "总体印象：用户最近迷上爬山" in text
+    assert "显式信息：" in text
+    assert "- [兴趣] 迷上爬山" in text
+    assert "隐含特质：" in text
+    assert "- 行动力强（Work-Focused）：迅速行动" in text
+    # 溯源/时间字段不进注入（降噪省 token）
+    assert "用户说X" not in text
+    assert "依据Y" not in text
+    assert "推断Z" not in text
+    assert "1782062158584" not in text
+    # 不出现 dict-repr 噪声
+    assert "{'" not in text
+
+
 def test_build_text_episodes_with_time():
     eps = [{"timestamp": 1716885133000, "summary": "循环 Aimer 新专辑"}]
     text = build_text([], eps, None)

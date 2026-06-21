@@ -22,6 +22,20 @@ MEMORY_TYPES = (
     MEMORY_TYPE_AGENT_SKILL,
 )
 
+# ── EverOS profile_data 结构字段（实测 schema，01 §1.1：summary/explicit_info/implicit_traits）──
+# injection 渲染与 profile_quality 校验共用，避免硬编码字符串散落（05 §一 单一事实源）。
+PROFILE_FIELD_SUMMARY = "summary"
+PROFILE_FIELD_EXPLICIT = "explicit_info"
+PROFILE_FIELD_IMPLICIT = "implicit_traits"
+PROFILE_FIELD_TIMESTAMP = "profile_timestamp_ms"
+# explicit_info[] / implicit_traits[] 内部字段
+PROFILE_KEY_CATEGORY = "category"
+PROFILE_KEY_DESCRIPTION = "description"
+PROFILE_KEY_EVIDENCE = "evidence"
+PROFILE_KEY_TRAIT = "trait"
+PROFILE_KEY_BASIS = "basis"
+PROFILE_KEY_TAGS = "tags"
+
 # ── 检索方法（对照 01 §2.4）──
 SEARCH_METHOD_HYBRID = "hybrid"
 SEARCH_METHODS = ("keyword", "vector", "hybrid", "agentic")

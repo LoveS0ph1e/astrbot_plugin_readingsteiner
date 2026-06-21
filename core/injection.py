@@ -22,6 +22,13 @@ from .constants import (
     DEFAULT_MEMORY_SUFFIX,
     INJECT_POSITION_APPEND,
     INJECT_TARGET_SYSTEM,
+    PROFILE_FIELD_EXPLICIT,
+    PROFILE_FIELD_IMPLICIT,
+    PROFILE_FIELD_SUMMARY,
+    PROFILE_KEY_CATEGORY,
+    PROFILE_KEY_DESCRIPTION,
+    PROFILE_KEY_TAGS,
+    PROFILE_KEY_TRAIT,
 )
 
 if TYPE_CHECKING:
@@ -86,21 +93,72 @@ def inject(
 def _render_profile(profile: dict[str, Any]) -> str:
     """渲染单条 profile。profile_data 是自由结构 object（01 §2.4），防御式处理。
 
-    优先取 profile_data；它可能是 str、dict 或缺失。dict 则按 key: value 平铺。
+    优先按 EverOS 实测 schema（summary/explicit_info/implicit_traits）渲染成整洁中文；
+    非该结构则回退到通用 key: value 平铺；str 则原样。
+    注入只保留对人设有用的字段（总体印象/类别+描述/特质+标签），
+    丢弃 evidence/basis/timestamp 等溯源字段（降噪省 token，质量校验另在 profile_quality）。
     """
     data = profile.get("profile_data", profile)
     if isinstance(data, str):
         return data.strip()
-    if isinstance(data, dict):
-        lines: list[str] = []
-        for key, val in data.items():
-            if val in (None, "", [], {}):
-                continue
-            if isinstance(val, (list, tuple)):
-                val = "、".join(str(v) for v in val if v not in (None, ""))
-            lines.append(f"- {key}：{val}")
-        return "\n".join(lines)
-    return str(data).strip() if data is not None else ""
+    if not isinstance(data, dict):
+        return str(data).strip() if data is not None else ""
+    # 命中 EverOS 画像 schema → 结构化中文渲染
+    schema_keys = (PROFILE_FIELD_SUMMARY, PROFILE_FIELD_EXPLICIT, PROFILE_FIELD_IMPLICIT)
+    if any(k in data for k in schema_keys):
+        rendered = _render_everos_profile(data)
+        if rendered:
+            return rendered
+    return _render_generic_dict(data)
+
+
+def _render_everos_profile(data: dict[str, Any]) -> str:
+    """EverOS 画像 schema → 整洁中文。三段：总体印象 / 显式信息 / 隐含特质。"""
+    blocks: list[str] = []
+    summary = data.get(PROFILE_FIELD_SUMMARY)
+    if isinstance(summary, str) and summary.strip():
+        blocks.append(f"总体印象：{summary.strip()}")
+
+    exp_lines = []
+    for item in data.get(PROFILE_FIELD_EXPLICIT) or []:
+        if not isinstance(item, dict):
+            continue
+        desc = (item.get(PROFILE_KEY_DESCRIPTION) or "").strip()
+        if not desc:
+            continue
+        cat = (item.get(PROFILE_KEY_CATEGORY) or "").strip()
+        exp_lines.append(f"- [{cat}] {desc}" if cat else f"- {desc}")
+    if exp_lines:
+        blocks.append("显式信息：\n" + "\n".join(exp_lines))
+
+    imp_lines = []
+    for item in data.get(PROFILE_FIELD_IMPLICIT) or []:
+        if not isinstance(item, dict):
+            continue
+        trait = (item.get(PROFILE_KEY_TRAIT) or "").strip()
+        desc = (item.get(PROFILE_KEY_DESCRIPTION) or "").strip()
+        if not trait and not desc:
+            continue
+        tags = item.get(PROFILE_KEY_TAGS) or []
+        tag_str = f"（{ '、'.join(str(t) for t in tags) }）" if tags else ""
+        head = trait or desc
+        body = f"：{desc}" if (trait and desc) else ""
+        imp_lines.append(f"- {head}{tag_str}{body}")
+    if imp_lines:
+        blocks.append("隐含特质：\n" + "\n".join(imp_lines))
+    return "\n".join(blocks)
+
+
+def _render_generic_dict(data: dict[str, Any]) -> str:
+    """通用 dict 平铺（非 EverOS schema 时的回退）。"""
+    lines: list[str] = []
+    for key, val in data.items():
+        if val in (None, "", [], {}):
+            continue
+        if isinstance(val, (list, tuple)):
+            val = "、".join(str(v) for v in val if v not in (None, ""))
+        lines.append(f"- {key}：{val}")
+    return "\n".join(lines)
 
 
 def _render_episodes(episodes: list[dict[str, Any]]) -> str:
