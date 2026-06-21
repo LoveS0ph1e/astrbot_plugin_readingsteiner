@@ -11,6 +11,7 @@
 inject 范式出处：Mnemosyne memory_operations.py:1023-1058（prepend/append × system/user）。
 本模块不解析身份（接收已检索结果），不调 EverOS（分层不串味，05 §三）。
 """
+
 from __future__ import annotations
 
 from datetime import datetime

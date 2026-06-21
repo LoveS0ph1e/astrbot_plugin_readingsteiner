@@ -17,6 +17,7 @@
 
 本模块只读 event + config，不调 EverOS（分层不串味，05 §三）。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

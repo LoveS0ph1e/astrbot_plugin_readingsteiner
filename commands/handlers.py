@@ -5,6 +5,7 @@
 
 降级安全：EverOS 不可达时命令返回友好提示，不抛异常（05 §二）。
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -39,9 +40,12 @@ async def status_impl(plugin, event: AstrMessageEvent):
     try:
         for mtype, label in ((MEMORY_TYPE_PROFILE, "画像"), (MEMORY_TYPE_EPISODE, "情景")):
             data = await plugin.client.get(
-                memory_type=mtype, user_id=ident.user_id,
-                app_id=ident.app_id, project_id=ident.project_id,
-                page=1, page_size=1,
+                memory_type=mtype,
+                user_id=ident.user_id,
+                app_id=ident.app_id,
+                project_id=ident.project_id,
+                page=1,
+                page_size=1,
             )
             lines.append(f"{label}: {data.get('total_count', 0)} 条")
     except EverOSUnavailable as e:
@@ -63,8 +67,10 @@ async def search_impl(plugin, event: AstrMessageEvent, query: str):
         return
     try:
         data = await plugin.client.search(
-            query=query, user_id=ident.user_id,
-            app_id=ident.app_id, project_id=ident.project_id,
+            query=query,
+            user_id=ident.user_id,
+            app_id=ident.app_id,
+            project_id=ident.project_id,
             method=plugin.config.get("search_method", "hybrid"),
             top_k=int(plugin.config.get("search_top_k", 5)),
             include_profile=plugin.config.get("include_profile", True),
@@ -93,14 +99,10 @@ async def flush_impl(plugin, event: AstrMessageEvent):
         yield event.plain_result(f"{LOG_PREFIX} EverOS 未连接。")
         return
     try:
-        data = await plugin.client.flush(
-            ident.session_id, ident.app_id, ident.project_id
-        )
+        data = await plugin.client.flush(ident.session_id, ident.app_id, ident.project_id)
         if plugin._flush_policy:
             plugin._flush_policy.discard(ident.session_id)
-        yield event.plain_result(
-            f"{LOG_PREFIX} flush 完成，status={data.get('status', '?')}"
-        )
+        yield event.plain_result(f"{LOG_PREFIX} flush 完成，status={data.get('status', '?')}")
     except EverOSUnavailable as e:
         yield event.plain_result(f"{LOG_PREFIX} flush 失败: {e}")
 

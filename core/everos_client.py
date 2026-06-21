@@ -9,6 +9,7 @@
   → 解析一律先取 data；有 error 抛 EverOSUnavailable
 - /health、/metrics 在 /api/v1 之外（01 §2.7）
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -141,9 +142,7 @@ class EverOSClient:
         返回 data: {episodes[], profiles[], agent_cases[], agent_skills[], unprocessed_messages[]}。
         """
         if (user_id is None) == (agent_id is None):
-            raise EverOSUnavailable(
-                "search 需恰好提供 user_id 或 agent_id 之一（01 §2.4）"
-            )
+            raise EverOSUnavailable("search 需恰好提供 user_id 或 agent_id 之一（01 §2.4）")
         payload: dict[str, Any] = {
             "query": query,
             "app_id": app_id,
@@ -184,9 +183,7 @@ class EverOSClient:
         返回 data: {<plural>[], total_count, count}。
         """
         if (user_id is None) == (agent_id is None):
-            raise EverOSUnavailable(
-                "get 需恰好提供 user_id 或 agent_id 之一（01 §2.5）"
-            )
+            raise EverOSUnavailable("get 需恰好提供 user_id 或 agent_id 之一（01 §2.5）")
         payload: dict[str, Any] = {
             "memory_type": memory_type,
             "app_id": app_id,

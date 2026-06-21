@@ -2,6 +2,7 @@
 
 测试不依赖 AstrBot（core/* 用 TYPE_CHECKING 守卫 astrbot import），故可脱离 AstrBot 运行。
 """
+
 import sys
 from pathlib import Path
 

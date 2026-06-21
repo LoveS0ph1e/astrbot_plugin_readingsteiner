@@ -1,4 +1,5 @@
 """归档逻辑测试（archiving.py）：消息构造 + flush 策略，纯逻辑无网络。"""
+
 from __future__ import annotations
 
 from core.archiving import FlushPolicy, build_messages
@@ -13,8 +14,10 @@ def test_build_messages_shape():
     m = build_messages("用户原话", "机器人回复", _ident(), now_ms=1700000000000)
     assert len(m) == 2
     assert m[0] == {
-        "sender_id": "10086", "role": "user",
-        "timestamp": 1700000000000, "content": "用户原话",
+        "sender_id": "10086",
+        "role": "user",
+        "timestamp": 1700000000000,
+        "content": "用户原话",
     }
     assert m[1]["sender_id"] == "bot01"
     assert m[1]["role"] == "assistant"

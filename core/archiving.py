@@ -10,6 +10,7 @@
 
 本模块不改 req（分层不串味，05 §三）。time 用 monotonic 记活动，避免系统时钟回拨误判。
 """
+
 from __future__ import annotations
 
 import time
@@ -78,11 +79,7 @@ class FlushPolicy:
         if self.strategy != ARCHIVE_AUTO:
             return []
         now = self._clock()
-        idle = [
-            sid
-            for sid, last in self._last_active.items()
-            if now - last >= self.idle_seconds
-        ]
+        idle = [sid for sid, last in self._last_active.items() if now - last >= self.idle_seconds]
         for sid in idle:
             self._last_active.pop(sid, None)
         return idle

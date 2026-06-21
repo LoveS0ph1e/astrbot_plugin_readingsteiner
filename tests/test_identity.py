@@ -2,6 +2,7 @@
 
 不依赖 AstrBot：用鸭子类型的 FakeEvent 喂 resolve。
 """
+
 from __future__ import annotations
 
 from core.identity import resolve

@@ -3,6 +3,7 @@
 main 只做钩子/命令的绑定与异常兜底，不写业务逻辑（02 §二）。
 业务在 core/*；EverOS 故障一律 try/except 降级，绝不阻断对话（02 §六）。
 """
+
 from __future__ import annotations
 
 import asyncio

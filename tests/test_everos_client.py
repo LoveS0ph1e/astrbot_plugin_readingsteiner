@@ -3,6 +3,7 @@
 验证点：POST 路径正确、payload 字段、响应取 data、error 包络抛异常、
 user_id/agent_id XOR 守卫、health 多格式兼容。
 """
+
 from __future__ import annotations
 
 import httpx
@@ -33,9 +34,7 @@ async def test_health_ok_status(client):
 
 @respx.mock
 async def test_health_healthy_status(client):
-    respx.get(f"{BASE}/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
+    respx.get(f"{BASE}/health").mock(return_value=httpx.Response(200, json={"status": "healthy"}))
     assert await client.health() is True
 
 

@@ -8,6 +8,7 @@ TASTE/IDENTITY/ROUTINE/VULNERABILITY/BOND）留作 v1.1，在此预留接口。
 
 本模块不调 EverOS、不写 EverOS（旁路过滤，05 §三）。
 """
+
 from __future__ import annotations
 
 from typing import Any
