@@ -161,10 +161,11 @@ async def help_impl(plugin, event: AstrMessageEvent):
     """/epk help：列出本插件真实存在的命令（与代码强一致，05 §三#5）。"""
     yield event.plain_result(
         f"{LOG_PREFIX} ReadingSteiner 记忆插件命令：\n"
+        "/epk flush         手动归档当前会话（所有人）\n"
+        "/epk help          显示本帮助（所有人）\n"
+        "—— 以下需管理员权限 ——\n"
         "/epk status        查看连接状态、当前身份与记忆计数\n"
         "/epk search <内容>  按当前用户检索记忆（调试用）\n"
         "/epk quality       抽查当前用户画像的提取质量\n"
-        "/epk flush         手动归档当前会话（manual 策略主用）\n"
-        "/epk forget        [管理员] 记忆删除说明（API 不支持，见提示）\n"
-        "/epk help          显示本帮助"
+        "/epk forget        记忆删除说明（API 不支持，见提示）"
     )

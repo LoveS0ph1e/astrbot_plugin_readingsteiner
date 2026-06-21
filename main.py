@@ -209,15 +209,17 @@ class ReadingSteinerPlugin(Star):
         """EverOS 长期记忆管理命令组 /epk（El Psy Kongroo）"""
         pass
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @epk_group.command("status")  # type: ignore
     async def epk_status(self, event: AstrMessageEvent):
-        """查看 EverOS 连接状态、当前身份与记忆计数"""
+        """[管理员] 查看 EverOS 连接状态、当前身份与记忆计数"""
         async for r in handlers.status_impl(self, event):
             yield r
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @epk_group.command("search")  # type: ignore
     async def epk_search(self, event: AstrMessageEvent, query: str = ""):
-        """按当前用户检索记忆 /epk search <内容>"""
+        """[管理员] 按当前用户检索记忆 /epk search <内容>"""
         async for r in handlers.search_impl(self, event, query):
             yield r
 
@@ -227,9 +229,10 @@ class ReadingSteinerPlugin(Star):
         async for r in handlers.flush_impl(self, event):
             yield r
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @epk_group.command("quality")  # type: ignore
     async def epk_quality(self, event: AstrMessageEvent):
-        """抽查当前用户画像质量 /epk quality"""
+        """[管理员] 抽查当前用户画像质量 /epk quality"""
         async for r in handlers.quality_impl(self, event):
             yield r
 
