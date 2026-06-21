@@ -227,6 +227,12 @@ class ReadingSteinerPlugin(Star):
         async for r in handlers.flush_impl(self, event):
             yield r
 
+    @epk_group.command("quality")  # type: ignore
+    async def epk_quality(self, event: AstrMessageEvent):
+        """抽查当前用户画像质量 /epk quality"""
+        async for r in handlers.quality_impl(self, event):
+            yield r
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @epk_group.command("forget")  # type: ignore
     async def epk_forget(self, event: AstrMessageEvent, confirm: str | None = None):

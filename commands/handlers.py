@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..core import identity as identity_mod
+from ..core import profile_quality
 from ..core.constants import LOG_PREFIX, MEMORY_TYPE_EPISODE, MEMORY_TYPE_PROFILE
 from ..core.everos_client import EverOSUnavailable
 
@@ -122,12 +123,47 @@ async def forget_impl(plugin, event: AstrMessageEvent, confirm: str | None = Non
     )
 
 
+async def quality_impl(plugin, event: AstrMessageEvent):
+    """/epk quality：抽查当前用户画像的提取质量（规则校验，无 LLM）。"""
+    ident = identity_mod.resolve(event, plugin.config)
+    if ident is None:
+        yield event.plain_result(f"{LOG_PREFIX} 无法解析身份。")
+        return
+    if not await plugin._healthy():
+        yield event.plain_result(f"{LOG_PREFIX} EverOS 未连接。")
+        return
+    try:
+        data = await plugin.client.get(
+            memory_type=MEMORY_TYPE_PROFILE,
+            user_id=ident.user_id,
+            app_id=ident.app_id,
+            project_id=ident.project_id,
+            page=1,
+            page_size=1,
+        )
+    except EverOSUnavailable as e:
+        yield event.plain_result(f"{LOG_PREFIX} 画像获取失败: {e}")
+        return
+    profiles = data.get("profiles", []) or []
+    if not profiles:
+        yield event.plain_result(
+            f"{LOG_PREFIX} 当前用户（user_id={ident.user_id}）尚无画像，多聊几轮后再查。"
+        )
+        return
+    report = profile_quality.check_profile(profiles[0])
+    yield event.plain_result(
+        f"{LOG_PREFIX} 画像质量抽查（user_id={ident.user_id}）：\n"
+        + profile_quality.format_report(report)
+    )
+
+
 async def help_impl(plugin, event: AstrMessageEvent):
     """/epk help：列出本插件真实存在的命令（与代码强一致，05 §三#5）。"""
     yield event.plain_result(
         f"{LOG_PREFIX} ReadingSteiner 记忆插件命令：\n"
         "/epk status        查看连接状态、当前身份与记忆计数\n"
         "/epk search <内容>  按当前用户检索记忆（调试用）\n"
+        "/epk quality       抽查当前用户画像的提取质量\n"
         "/epk flush         手动归档当前会话（manual 策略主用）\n"
         "/epk forget        [管理员] 记忆删除说明（API 不支持，见提示）\n"
         "/epk help          显示本帮助"
