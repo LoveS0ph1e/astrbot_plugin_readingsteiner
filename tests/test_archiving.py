@@ -38,6 +38,49 @@ def test_auto_does_not_flush_now():
     assert FlushPolicy("auto", 300).should_flush_now("s") is False
 
 
+def test_auto_turn_trigger_flushes_at_threshold():
+    fp = FlushPolicy("auto", 1800, every_n_turns=3)
+    fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is False  # 1 轮
+    fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is False  # 2 轮
+    fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is True  # 3 轮达阈值
+
+
+def test_auto_turn_trigger_resets_after_flush():
+    fp = FlushPolicy("auto", 1800, every_n_turns=2)
+    fp.mark_active("s1")
+    fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is True  # 触发并清零
+    fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is False  # 计数已重置，仅 1 轮
+
+
+def test_auto_turn_trigger_per_session_isolated():
+    fp = FlushPolicy("auto", 1800, every_n_turns=2)
+    fp.mark_active("s1")
+    fp.mark_active("s2")
+    assert fp.should_flush_now("s1") is False  # s1 仅 1 轮，s2 不串味
+
+
+def test_auto_turn_trigger_disabled_when_zero():
+    fp = FlushPolicy("auto", 1800, every_n_turns=0)
+    for _ in range(50):
+        fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is False  # 0=禁用轮数触发
+
+
+def test_turn_flush_clears_idle_tracking():
+    clk = {"t": 0.0}
+    fp = FlushPolicy("auto", 300, every_n_turns=2, clock=lambda: clk["t"])
+    fp.mark_active("s1")
+    fp.mark_active("s1")
+    assert fp.should_flush_now("s1") is True  # 轮数触发后清活动记录
+    clk["t"] = 9999
+    assert fp.idle_sessions() == []  # 不再被后台兜底重复 flush
+
+
 def test_auto_idle_after_timeout():
     clk = {"t": 0.0}
     fp = FlushPolicy("auto", 300, clock=lambda: clk["t"])

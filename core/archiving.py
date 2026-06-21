@@ -6,7 +6,10 @@
 2. FlushPolicy：auto / every_turn / manual 三策略。
    - every_turn：每轮 add 后立即 flush（实时高、LLM 成本高）。
    - manual：只 add，靠 /epk flush 手动触发。
-   - auto（默认）：只 add，记录会话活动时间，由后台任务在静默超时后 flush。
+   - auto（默认）：双触发，谁先到谁 flush——
+       · 轮数触发：累积 every_n_turns 轮即 flush（长聊及时固化，0=禁用）；
+       · 静默兜底：后台任务在静默超 idle_seconds 后 flush（停聊收尾）。
+     底层 EverOS 边界检测决定是否真正提取（未到语义边界则只 accumulate，成本低）。
 
 本模块不改 req（分层不串味，05 §三）。time 用 monotonic 记活动，避免系统时钟回拨误判。
 """
@@ -53,23 +56,46 @@ def build_messages(
 class FlushPolicy:
     """auto/every_turn/manual 三策略（02 §3.3）。
 
-    auto 记录每个 session 的最后活动时刻（monotonic 秒），后台任务调 idle_sessions()
-    取出静默超过 idle_seconds 的 session 去 flush。
+    auto 为双触发：mark_active 累加每会话轮数计数并记录最后活动时刻（monotonic 秒）；
+    should_flush_now 在轮数达 every_n_turns 时立即触发（并清零计数）；
+    idle_sessions 供后台任务取静默超 idle_seconds 的会话做兜底 flush。
     """
 
-    def __init__(self, strategy: str, idle_seconds: int, *, clock=None) -> None:
+    def __init__(
+        self,
+        strategy: str,
+        idle_seconds: int,
+        every_n_turns: int = 0,
+        *,
+        clock=None,
+    ) -> None:
         self.strategy = strategy
         self.idle_seconds = idle_seconds
+        self.every_n_turns = max(0, every_n_turns)  # 0=禁用轮数触发
         self._clock = clock or time.monotonic
         self._last_active: dict[str, float] = {}
+        self._turns: dict[str, int] = {}
 
     def mark_active(self, session_id: str) -> None:
-        """记录会话活动时刻。每次 add 后调用。"""
+        """记录会话活动时刻并累加轮数。每次 add 后调用。"""
         self._last_active[session_id] = self._clock()
+        self._turns[session_id] = self._turns.get(session_id, 0) + 1
 
     def should_flush_now(self, session_id: str) -> bool:
-        """归档后是否立即 flush：every_turn→True；auto/manual→False。"""
-        return self.strategy == ARCHIVE_EVERY_TURN
+        """归档后是否立即 flush。
+
+        every_turn→恒 True；auto→轮数达阈值时 True（并清零计数）；manual→False。
+        """
+        if self.strategy == ARCHIVE_EVERY_TURN:
+            return True
+        if (
+            self.strategy == ARCHIVE_AUTO
+            and self.every_n_turns > 0
+            and self._turns.get(session_id, 0) >= self.every_n_turns
+        ):
+            self.discard(session_id)  # 清零轮数与活动记录，避免后台重复 flush
+            return True
+        return False
 
     def idle_sessions(self) -> list[str]:
         """auto 后台任务用：返回静默超过 idle_seconds 的 session，并从跟踪表移除。
@@ -81,9 +107,10 @@ class FlushPolicy:
         now = self._clock()
         idle = [sid for sid, last in self._last_active.items() if now - last >= self.idle_seconds]
         for sid in idle:
-            self._last_active.pop(sid, None)
+            self.discard(sid)
         return idle
 
     def discard(self, session_id: str) -> None:
-        """显式丢弃某会话的活动记录（如手动 flush 后）。"""
+        """显式丢弃某会话的活动记录与轮数计数（flush 后调用）。"""
         self._last_active.pop(session_id, None)
+        self._turns.pop(session_id, None)

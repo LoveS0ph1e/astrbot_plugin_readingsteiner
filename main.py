@@ -21,7 +21,7 @@ from .core.constants import (
     ARCHIVE_AUTO,
     DEFAULT_BASE_URL,
     DEFAULT_PROJECT_ID,
-    INJECT_TARGET_SYSTEM,
+    INJECT_TARGET_USER,
     LOG_PREFIX,
 )
 from .core.everos_client import EverOSClient, EverOSUnavailable
@@ -42,6 +42,7 @@ class ReadingSteinerPlugin(Star):
         self.client: EverOSClient | None = None
         self._flush_policy: archiving.FlushPolicy | None = None
         self._bg_task: asyncio.Task | None = None
+        self._everos_up: bool | None = None  # 健康状态;None=首次未探测，用于跳变告警节流
 
     # ────────────────── 生命周期 ──────────────────
 
@@ -55,7 +56,8 @@ class ReadingSteinerPlugin(Star):
             )
             self._flush_policy = archiving.FlushPolicy(
                 self.config.get("archive_strategy", ARCHIVE_AUTO),
-                int(self.config.get("flush_idle_seconds", 300)),
+                int(self.config.get("flush_idle_seconds", 1800)),
+                int(self.config.get("flush_every_n_turns", 0)),
             )
             ok = await self._healthy()
             state = "已连接" if ok else "暂不可达（将惰性重试）"
@@ -76,13 +78,34 @@ class ReadingSteinerPlugin(Star):
         logger.info(f"{LOG_PREFIX} 已停止，资源已释放")
 
     async def _healthy(self) -> bool:
-        """惰性健康探测：任何异常视为不健康（容器晚起也能自愈，06 §五）。"""
+        """惰性健康探测：任何异常视为不健康（容器晚起也能自愈，06 §五）。
+
+        健康状态发生跳变时各打一次日志（持续同态不刷屏）：
+        可达→不可达打 WARNING（长期记忆降级），不可达→可达打 INFO（恢复）。
+        """
         if self.client is None:
             return False
         try:
-            return await self.client.health()
+            ok = await self.client.health()
         except EverOSUnavailable:
-            return False
+            ok = False
+        self._note_health(ok)
+        return ok
+
+    def _note_health(self, ok: bool) -> None:
+        """记录健康跳变并节流告警；首次（None）静默，由 on_loaded 负责首条日志。"""
+        if self._everos_up is None:
+            self._everos_up = ok
+            return
+        if ok == self._everos_up:
+            return
+        self._everos_up = ok
+        if ok:
+            logger.info(f"{LOG_PREFIX} EverOS 已恢复，长期记忆功能重新启用")
+        else:
+            logger.warning(
+                f"{LOG_PREFIX} EverOS 不可达，本轮起跳过记忆注入与归档（对话不受影响，将惰性重试）"
+            )
 
     async def _auto_flush_loop(self):
         """auto 策略后台任务：周期性 flush 静默超时的会话。"""
@@ -146,7 +169,7 @@ class ReadingSteinerPlugin(Star):
             injection.inject(
                 req,
                 text,
-                self.config.get("injection_target", INJECT_TARGET_SYSTEM),
+                self.config.get("injection_target", INJECT_TARGET_USER),
                 self.config.get("injection_position", "prepend"),
             )
         except Exception as e:

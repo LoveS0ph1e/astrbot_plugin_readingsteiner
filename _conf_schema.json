@@ -25,9 +25,9 @@
   },
   "injection_target": {
     "description": "注入目标",
-    "hint": "system_prompt（推荐，画像作系统级背景）或 user_prompt",
+    "hint": "user_prompt（推荐，记忆作用户轮上下文，system_prompt 留给人格独占，不破坏角色风格与前缀缓存）或 system_prompt",
     "type": "string",
-    "default": "system_prompt",
+    "default": "user_prompt",
     "options": ["system_prompt", "user_prompt"]
   },
   "injection_position": {
@@ -76,8 +76,15 @@
   },
   "flush_idle_seconds": {
     "description": "auto 策略下会话静默多久后 flush（秒）",
+    "hint": "静默兜底触发：用户停聊超此时长则提取归档。1800=30分钟，避免中途离开误触发、保 episode 完整",
     "type": "int",
-    "default": 300
+    "default": 1800
+  },
+  "flush_every_n_turns": {
+    "description": "auto 策略下累积多少轮对话即 flush（0=禁用，仅靠静默兜底）",
+    "hint": "轮数主触发：长时间连续聊天时及时固化记忆，与静默兜底取「谁先到」。建议 10~20；底层 EverOS 边界检测仍决定是否真正提取",
+    "type": "int",
+    "default": 10
   },
   "app_id": {
     "description": "EverOS app 标识",
