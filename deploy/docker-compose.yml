@@ -1,0 +1,38 @@
+# EverOS 记忆引擎服务编排（配合 astrbot_plugin_readingsteiner）
+# 用法见 deploy/README.md。插件用 http://everos:8000 连接（同 docker 网络）。
+services:
+  everos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: readingsteiner-everos:1.0.1
+    container_name: everos
+    env_file:
+      - .env                      # 从 .env.example 复制并填 key（已 gitignore）
+    environment:
+      - EVEROS_API__HOST=0.0.0.0  # 容器内必须绑 0.0.0.0，否则同网络其它容器连不上
+      - EVEROS_API__PORT=8000
+      - EVEROS_MEMORY__ROOT=/data/everos
+    volumes:
+      - everos_data:/data/everos  # 记忆持久化：重启/换插件不丢
+    ports:
+      - "127.0.0.1:8000:8000"     # 仅本机暴露；同网络容器走服务名 everos，不依赖此映射
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - astrbot_net
+
+volumes:
+  everos_data:
+
+networks:
+  astrbot_net:
+    # 与 AstrBot 容器共用同一网络。两种接入姿势见 deploy/README.md：
+    #   1) 把本 everos 服务块并进 AstrBot 的 compose（同文件天然同网络）
+    #   2) 独立 compose + 把此网络设为 external 引用 AstrBot 已有网络
+    driver: bridge

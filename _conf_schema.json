@@ -1,0 +1,111 @@
+{
+  "everos_base_url": {
+    "description": "EverOS 服务地址",
+    "hint": "同 docker 网络用服务名 http://everos:8000；非容器/单机部署改为 http://127.0.0.1:8000",
+    "type": "string",
+    "default": "http://everos:8000"
+  },
+  "request_timeout": {
+    "description": "HTTP 请求超时（秒）",
+    "hint": "EverOS 不可达或超时按『无记忆』降级，不阻断对话",
+    "type": "int",
+    "default": 30
+  },
+  "enable_injection": {
+    "description": "启用自动记忆注入",
+    "hint": "on_llm_request 钩子里按当前用户检索 EverOS 并注入画像+情景",
+    "type": "bool",
+    "default": true
+  },
+  "enable_archiving": {
+    "description": "启用自动对话归档",
+    "hint": "on_llm_response 钩子里把本轮 user+assistant 消息写入 EverOS",
+    "type": "bool",
+    "default": true
+  },
+  "injection_target": {
+    "description": "注入目标",
+    "hint": "system_prompt（推荐，画像作系统级背景）或 user_prompt",
+    "type": "string",
+    "default": "system_prompt",
+    "options": ["system_prompt", "user_prompt"]
+  },
+  "injection_position": {
+    "description": "注入位置",
+    "hint": "prepend 注入到开头；append 注入到结尾",
+    "type": "string",
+    "default": "prepend",
+    "options": ["prepend", "append"]
+  },
+  "memory_prefix": {
+    "description": "注入文本前缀标签",
+    "hint": "用插件专属标签，勿与其它记忆插件撞",
+    "type": "string",
+    "default": "<ReadingSteiner_Memory>"
+  },
+  "memory_suffix": {
+    "description": "注入文本后缀标签",
+    "type": "string",
+    "default": "</ReadingSteiner_Memory>"
+  },
+  "search_top_k": {
+    "description": "情景记忆检索条数",
+    "hint": "按相关度返回的 episode 上限",
+    "type": "int",
+    "default": 5
+  },
+  "search_method": {
+    "description": "检索方法",
+    "hint": "hybrid（推荐，BM25+向量+标量）/ keyword / vector / agentic",
+    "type": "string",
+    "default": "hybrid",
+    "options": ["hybrid", "keyword", "vector", "agentic"]
+  },
+  "include_profile": {
+    "description": "恒注入用户画像",
+    "hint": "EverOS 默认不返回画像，开启才检索 profiles[]（本插件核心价值）",
+    "type": "bool",
+    "default": true
+  },
+  "archive_strategy": {
+    "description": "归档触发策略",
+    "hint": "auto（推荐，依赖 EverOS 边界检测+静默 flush）/ every_turn（每轮 flush，LLM 成本高）/ manual",
+    "type": "string",
+    "default": "auto",
+    "options": ["auto", "every_turn", "manual"]
+  },
+  "flush_idle_seconds": {
+    "description": "auto 策略下会话静默多久后 flush（秒）",
+    "type": "int",
+    "default": 300
+  },
+  "app_id": {
+    "description": "EverOS app 标识",
+    "hint": "记忆 scope 之一；不同 app 的记忆互不可见",
+    "type": "string",
+    "default": "astrbot"
+  },
+  "project_id": {
+    "description": "EverOS project 标识",
+    "type": "string",
+    "default": "default"
+  },
+  "isolation_personas": {
+    "description": "独立记忆空间的人格白名单（逗号分隔）",
+    "hint": "在此列表里的人格用独立 app_id（app_id_人格名），列表外共享。例如：助手A,助手B",
+    "type": "string",
+    "default": ""
+  },
+  "group_public_only": {
+    "description": "群聊只注入公开层",
+    "hint": "visibility 方案A：群聊时跳过情景细节，只注入画像公开摘要，防隐私泄露",
+    "type": "bool",
+    "default": true
+  },
+  "enabled_sessions": {
+    "description": "会话白名单（逗号分隔，留空=全部启用）",
+    "hint": "填入 unified_msg_origin 片段以限定仅特定会话启用记忆",
+    "type": "string",
+    "default": ""
+  }
+}
