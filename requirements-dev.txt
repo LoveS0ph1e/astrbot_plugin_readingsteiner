@@ -1,0 +1,6 @@
+# 开发/测试依赖（不随插件安装，仅本地开发用）
+-r requirements.txt
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+respx>=0.21.0      # mock httpx 请求，供 test_everos_client.py 使用
+ruff>=0.6.0       # 代码格式化与静态检查（发布前 ruff 格式化，见 05 第五节）
