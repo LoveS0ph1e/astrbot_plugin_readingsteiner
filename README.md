@@ -1,4 +1,4 @@
-# ReadingSteiner · AstrBot 长期记忆插件
+# ReadingSteiner · 记忆探知之魔眼 · AstrBot 长期记忆插件
 
 > 基于 **EverOS 自进化记忆引擎**，为 AstrBot 提供「持久用户画像 + 按平台真实身份硬隔离」的长期记忆能力。
 
