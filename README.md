@@ -1,6 +1,10 @@
-# astrbot_plugin_everos
+# astrbot_plugin_readingsteiner
 
 基于 **EverOS 自进化记忆引擎**的 AstrBot 长期记忆插件：持久用户画像 + 按平台真实身份（QQ 号）硬隔离。
+
+> 命名说明：项目名为 `astrbot_plugin_readingsteiner`；底层记忆能力由 EverOS 引擎提供，
+> 故 `docs/` 设计文档中以"接入 EverOS 的插件"为视角行文，文内出现的 `astrbot_plugin_everos`
+> 指代的即本插件。实现时 `metadata.yaml` 的 `name` 字段填 `astrbot_plugin_readingsteiner`。
 
 > 当前仓库为**初始工程脚手架**。内部架构（`core/`、`commands/`、`tests/` 等模块）尚未实现，
 > 实现请遵循 `docs/` 下的构建规划文档，从 `03-构建任务清单.md` 的任务 0 开始。
