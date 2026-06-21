@@ -1,8 +1,8 @@
-"""归档：event+response → EverOS add/flush。出处：02 §3.2 / §3.3。
+"""归档：event+response → EverOS add/flush。
 
 两件事：
 1. build_messages：构造 user+assistant 两条 MessageItem。
-   ⚠️ timestamp = Unix 毫秒 int（01 §2.2）；user 的 sender_id = QQ 号（索引键）。
+   ⚠️ timestamp = Unix 毫秒 int；user 的 sender_id = QQ 号（索引键）。
 2. FlushPolicy：auto / every_turn / manual 三策略。
    - every_turn：每轮 add 后立即 flush（实时高、LLM 成本高）。
    - manual：只 add，靠 /epk flush 手动触发。
@@ -11,7 +11,7 @@
        · 静默兜底：后台任务在静默超 idle_seconds 后 flush（停聊收尾）。
      底层 EverOS 边界检测决定是否真正提取（未到语义边界则只 accumulate，成本低）。
 
-本模块不改 req（分层不串味，05 §三）。time 用 monotonic 记活动，避免系统时钟回拨误判。
+本模块不改 req（分层不串味）。time 用 monotonic 记活动，避免系统时钟回拨误判。
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def build_messages(
     identity: Identity,
     now_ms: int | None = None,
 ) -> list[dict]:
-    """构造两条 MessageItem（01 §2.2）。
+    """构造两条 MessageItem。
 
     now_ms 可注入以便单测；默认取当前 Unix 毫秒。assistant 比 user 晚 1ms 保序。
     """
@@ -54,7 +54,7 @@ def build_messages(
 
 
 class FlushPolicy:
-    """auto/every_turn/manual 三策略（02 §3.3）。
+    """auto/every_turn/manual 三策略。
 
     auto 为双触发：mark_active 累加每会话轮数计数并记录最后活动时刻（monotonic 秒）；
     should_flush_now 在轮数达 every_n_turns 时立即触发（并清零计数）；

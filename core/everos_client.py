@@ -1,13 +1,13 @@
 """EverOS REST API v1 异步客户端。
 
 纯 HTTP 封装，输入输出皆 dict/原生类型，不依赖任何 AstrBot 类型
-（便于脱离 AstrBot 单测，也便于其它项目复用，见 05-审计与迭代规约.md §二）。
+（便于脱离 AstrBot 单测，也便于其它项目复用）。
 
-契约出处：01-实证依据.md 第二部分。要点：
-- 所有业务端点在 /api/v1/memory/ 下，全部 POST（即使语义像读，01 §2.1 头）
-- 200 响应统一包络 {request_id, data:{...}}；错误 {request_id, error:{...}}（01 §2.1）
+EverOS API 契约要点：
+- 所有业务端点在 /api/v1/memory/ 下，全部 POST（即使语义像读）
+- 200 响应统一包络 {request_id, data:{...}}；错误 {request_id, error:{...}}
   → 解析一律先取 data；有 error 抛 EverOSUnavailable
-- /health、/metrics 在 /api/v1 之外（01 §2.7）
+- /health、/metrics 在 /api/v1 之外
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from .constants import (
 class EverOSUnavailable(Exception):
     """EverOS 不可达 / 请求失败 / 返回 error 包络。
 
-    上层钩子捕获后降级（跳过记忆，不阻断对话，02 §六）。
+    上层钩子捕获后降级（跳过记忆，不阻断对话）。
     """
 
 
@@ -50,7 +50,7 @@ class EverOSClient:
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         """统一 POST：发请求 → raise_for_status → 取 data。
 
-        网络/HTTP 错误统一抛 EverOSUnavailable；error 包络也抛（01 §2.1）。
+        网络/HTTP 错误统一抛 EverOSUnavailable；error 包络也抛。
         """
         try:
             resp = await self._client.post(f"{self.base_url}{path}", json=payload)
@@ -67,7 +67,7 @@ class EverOSClient:
     async def health(self) -> bool:
         """GET /health → True 当 data.status in ('ok','healthy')。
 
-        /health 在 /api/v1 之外（01 §2.7）。任何异常视为不健康（返回 False）。
+        /health 在 /api/v1 之外。任何异常视为不健康（返回 False）。
         """
         try:
             resp = await self._client.get(f"{self.base_url}/health")
@@ -88,7 +88,7 @@ class EverOSClient:
         app_id: str = DEFAULT_APP_ID,
         project_id: str = DEFAULT_PROJECT_ID,
     ) -> dict[str, Any]:
-        """POST /api/v1/memory/add（归档写入，契约 01 §2.2）。
+        """POST /api/v1/memory/add（归档写入）。
 
         messages 每条: {sender_id, role, timestamp(ms,int), content, [sender_name]}。
         ⚠️ role=user 的 sender_id 即记忆索引键（必须是 QQ 号）。
@@ -108,7 +108,7 @@ class EverOSClient:
         app_id: str = DEFAULT_APP_ID,
         project_id: str = DEFAULT_PROJECT_ID,
     ) -> dict[str, Any]:
-        """POST /api/v1/memory/flush（强制提取，契约 01 §2.3）。
+        """POST /api/v1/memory/flush（强制提取）。
 
         返回 data: {status: 'extracted'|'no_extraction'}。markdown 落盘同步，索引异步。
         """
@@ -134,7 +134,7 @@ class EverOSClient:
         enable_llm_rerank: bool = False,
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """POST /api/v1/memory/search（检索，注入用，契约 01 §2.4）。
+        """POST /api/v1/memory/search（检索，注入用）。
 
         ⚠️ user_id / agent_id 必须恰好设一个（否则 EverOS 422）。本地先校验，
            避免无谓往返，也避免误传两个被服务端拒。
@@ -142,7 +142,7 @@ class EverOSClient:
         返回 data: {episodes[], profiles[], agent_cases[], agent_skills[], unprocessed_messages[]}。
         """
         if (user_id is None) == (agent_id is None):
-            raise EverOSUnavailable("search 需恰好提供 user_id 或 agent_id 之一（01 §2.4）")
+            raise EverOSUnavailable("search 需恰好提供 user_id 或 agent_id 之一")
         payload: dict[str, Any] = {
             "query": query,
             "app_id": app_id,
@@ -176,14 +176,14 @@ class EverOSClient:
         sort_order: str = "desc",
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """POST /api/v1/memory/get（分页列举，管理命令/统计用，契约 01 §2.5）。
+        """POST /api/v1/memory/get（分页列举，管理命令/统计用）。
 
         ⚠️ memory_type 仅 episode/profile/agent_case/agent_skill（不是 user_profile）。
         ⚠️ user_id / agent_id 恰好一个。
         返回 data: {<plural>[], total_count, count}。
         """
         if (user_id is None) == (agent_id is None):
-            raise EverOSUnavailable("get 需恰好提供 user_id 或 agent_id 之一（01 §2.5）")
+            raise EverOSUnavailable("get 需恰好提供 user_id 或 agent_id 之一")
         payload: dict[str, Any] = {
             "memory_type": memory_type,
             "app_id": app_id,

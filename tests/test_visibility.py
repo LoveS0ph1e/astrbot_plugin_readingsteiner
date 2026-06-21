@@ -1,6 +1,6 @@
-"""visibility 隐私分层测试（任务 9 / 02 §五）。
+"""visibility 隐私分层测试。
 
-方案 A（MVP）：群聊公开层过滤 filter_public —— 保留 profiles、丢弃 episodes。
+群聊公开层过滤 filter_public —— 保留 profiles、丢弃 episodes。
 覆盖四种场景（都有 / 只有画像 / 只有情景 / 都空）+ 不变量（内容完整、不改入参）。
 """
 

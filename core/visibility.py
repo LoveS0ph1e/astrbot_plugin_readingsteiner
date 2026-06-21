@@ -1,12 +1,11 @@
-"""visibility 隐私分层（02 §五）。
+"""visibility 隐私分层。
 
-EverOS schema 不支持自定义可见性标签（01 §1.3），故隐私分层靠本插件旁路实现。
+EverOS schema 不支持自定义可见性标签，故隐私分层靠本插件旁路实现。
 
-MVP 实现方案 A 的粗粒度版：群聊时只保留画像、跳过情景细节（episode 常含具体事件，
-更易泄露隐私）。细粒度方案 B（user_id → visibility 规则本地表，对应审计 §11.6 五类目
-TASTE/IDENTITY/ROUTINE/VULNERABILITY/BOND）留作 v1.1，在此预留接口。
+MVP 实现粗粒度版：群聊时只保留画像、跳过情景细节（episode 常含具体事件，
+更易泄露隐私）。细粒度版（user_id → visibility 规则本地表）留作 v1.1，在此预留接口。
 
-本模块不调 EverOS、不写 EverOS（旁路过滤，05 §三）。
+本模块不调 EverOS、不写 EverOS（旁路过滤）。
 """
 
 from __future__ import annotations

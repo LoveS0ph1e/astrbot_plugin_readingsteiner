@@ -1,6 +1,6 @@
 """注入：检索结果 → 记忆文本 → 改写 ProviderRequest。
 
-注入文本结构（02 §3.1，区分稳定画像与相关情景）：
+注入文本结构（区分稳定画像与相关情景）：
     <ReadingSteiner_Memory>
     【用户长期印象】          ← profiles[].profile_data（恒注入）
     ...
@@ -8,8 +8,7 @@
     - [时间] {summary}
     </ReadingSteiner_Memory>
 
-inject 范式出处：Mnemosyne memory_operations.py:1023-1058（prepend/append × system/user）。
-本模块不解析身份（接收已检索结果），不调 EverOS（分层不串味，05 §三）。
+本模块不解析身份（接收已检索结果），不调 EverOS（分层不串味）。
 """
 
 from __future__ import annotations
@@ -91,7 +90,7 @@ def inject(
 
 
 def _render_profile(profile: dict[str, Any]) -> str:
-    """渲染单条 profile。profile_data 是自由结构 object（01 §2.4），防御式处理。
+    """渲染单条 profile。profile_data 是自由结构 object，防御式处理。
 
     优先按 EverOS 实测 schema（summary/explicit_info/implicit_traits）渲染成整洁中文；
     非该结构则回退到通用 key: value 平铺；str 则原样。

@@ -1,7 +1,7 @@
 """astrbot_plugin_readingsteiner —— 基于 EverOS 的 AstrBot 长期记忆插件。
 
-main 只做钩子/命令的绑定与异常兜底，不写业务逻辑（02 §二）。
-业务在 core/*；EverOS 故障一律 try/except 降级，绝不阻断对话（02 §六）。
+main 只做钩子/命令的绑定与异常兜底，不写业务逻辑。
+业务在 core/*；EverOS 故障一律 try/except 降级，绝不阻断对话。
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class ReadingSteinerPlugin(Star):
 
     @filter.on_astrbot_loaded()
     async def on_loaded(self):
-        """AstrBot 就绪后初始化 client 与 auto-flush 后台任务（健康探测惰性化，06 §五）。"""
+        """AstrBot 就绪后初始化 client 与 auto-flush 后台任务（健康探测惰性化）。"""
         try:
             self.client = EverOSClient(
                 self.config.get("everos_base_url", DEFAULT_BASE_URL),
@@ -68,7 +68,7 @@ class ReadingSteinerPlugin(Star):
             logger.error(f"{LOG_PREFIX} 初始化失败: {e}", exc_info=True)
 
     async def terminate(self):
-        """卸载/停用时关 client、取消后台任务（02 §六）。"""
+        """卸载/停用时关 client、取消后台任务。"""
         if self._bg_task:
             self._bg_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -78,7 +78,7 @@ class ReadingSteinerPlugin(Star):
         logger.info(f"{LOG_PREFIX} 已停止，资源已释放")
 
     async def _healthy(self) -> bool:
-        """惰性健康探测：任何异常视为不健康（容器晚起也能自愈，06 §五）。
+        """惰性健康探测：任何异常视为不健康（容器晚起也能自愈）。
 
         健康状态发生跳变时各打一次日志（持续同态不刷屏）：
         可达→不可达打 WARNING（长期记忆降级），不可达→可达打 INFO（恢复）。
@@ -141,7 +141,7 @@ class ReadingSteinerPlugin(Star):
 
     @filter.on_llm_request()
     async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
-        """LLM 请求前：检索当前用户记忆并注入（02 §3.1）。"""
+        """LLM 请求前：检索当前用户记忆并注入。"""
         try:
             if not self.config.get("enable_injection", True):
                 return
@@ -177,7 +177,7 @@ class ReadingSteinerPlugin(Star):
 
     @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, resp: LLMResponse):
-        """LLM 响应后：归档本轮对话（02 §3.2）。"""
+        """LLM 响应后：归档本轮对话。"""
         try:
             if not self.config.get("enable_archiving", True):
                 return

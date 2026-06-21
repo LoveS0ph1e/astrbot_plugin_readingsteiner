@@ -1,4 +1,4 @@
-"""身份解析回归测试：守住三条铁律（identity.py），防跨用户串线（审计 §15.9）。
+"""身份解析回归测试：守住三条铁律（identity.py），防跨用户串线。
 
 不依赖 AstrBot：用鸭子类型的 FakeEvent 喂 resolve。
 """

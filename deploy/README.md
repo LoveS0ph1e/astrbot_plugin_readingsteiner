@@ -50,17 +50,6 @@ networks:
 - 彻底清空：`docker compose down -v`（**会删卷，记忆不可恢复**，谨慎）。
 - 删单个用户记忆：EverOS v1 API 无删除端点，需进卷删对应 user 的 md 目录后重建索引。
 
-## 验证任务 0（画像质量探针）
-
-服务 healthy 后，从仓库根运行探针（探针在宿主机用 httpx 打 8000，无需进容器）：
-
-```bash
-python experiments/probe_everos_profile.py --base-url http://127.0.0.1:8000
-```
-
-它会灌入 `experiments/sample_dialogue.json` → flush → search，把画像与情景 dump 到
-`experiments/everos-profile-probe.md` 供人工判断（详见该文件与 `docs/03` 任务 0）。
-
 ## 生产环境注意事项（投产前必读）
 
 1. **EverOS 无内置鉴权**：默认绑 `127.0.0.1`，仅本机/同 docker 网络可达，本地安全。

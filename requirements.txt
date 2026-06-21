@@ -1,4 +1,4 @@
 # astrbot_plugin_readingsteiner 运行依赖
-# 规约：只列真实依赖，锁定下限版本（见 05-审计与迭代规约.md 第五节）
+# 只列真实依赖，锁定下限版本。
 # MVP 仅需 httpx 作 EverOS HTTP 异步客户端；fastapi/uvicorn 属 WebUI（v1.1），暂不引入。
 httpx>=0.27.0

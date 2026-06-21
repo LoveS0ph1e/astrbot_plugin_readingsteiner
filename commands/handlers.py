@@ -1,9 +1,8 @@
-"""/epk 命令组的实现（02 §二：命令逻辑在此，main 只绑定）。
+"""/epk 命令组的实现（命令逻辑在此，main 只绑定）。
 
 每个 impl 是 async generator，逐条 yield event.plain_result(...)，由 main 的命令方法代理 yield。
-范式参考 Mnemosyne/main.py:649-741（command_group + impl 代理 + permission_type + confirm）。
 
-降级安全：EverOS 不可达时命令返回友好提示，不抛异常（05 §二）。
+降级安全：EverOS 不可达时命令返回友好提示，不抛异常。
 """
 
 from __future__ import annotations
@@ -113,9 +112,9 @@ async def flush_impl(plugin, event: AstrMessageEvent):
 async def forget_impl(plugin, event: AstrMessageEvent, confirm: str | None = None):
     """[管理员] /epk forget [confirm]：删除当前用户记忆。
 
-    ⚠️ 诚实边界（05 §三#5）：EverOS v1 API 仅 add/flush/get/search 四个端点，
-    无删除端点（已核对 docs/openapi.json）。故本命令无法经 API 删除记忆，
-    只能如实告知正确做法：EverOS 记忆是磁盘上的 markdown，删除需在 EverOS 侧操作。
+    ⚠️ 诚实边界：EverOS v1 API 仅 add/flush/get/search 四个端点，无删除端点。
+    故本命令无法经 API 删除记忆，只能如实告知正确做法：EverOS 记忆是磁盘上的
+    markdown，删除需在 EverOS 侧操作。
     """
     yield event.plain_result(
         f"{LOG_PREFIX} EverOS v1 API has no delete endpoint; the plugin cannot delete memories.\n"
@@ -162,7 +161,7 @@ async def quality_impl(plugin, event: AstrMessageEvent):
 
 
 async def help_impl(plugin, event: AstrMessageEvent):
-    """/epk help：列出本插件真实存在的命令（与代码强一致，05 §三#5）。"""
+    """/epk help：列出本插件真实存在的命令（与代码强一致）。"""
     yield event.plain_result(
         f"{LOG_PREFIX} ReadingSteiner memory plugin commands:\n"
         "/epk flush         Archive the current session now (everyone)\n"

@@ -4,8 +4,8 @@ EverOS 的 profile_data 由 LLM 生成，可能有结构缺陷或语用误判（
 误读为"用户健忘"）。本模块以**确定性规则**对单份 profile_data 做体检，输出
 可量化的质量报告（score + issues），供 /epk quality 抽查或离线验收脚本调用。
 
-不调 LLM、不调 EverOS（纯函数，05 §三 分层不串味）；输入是 client.get(profile)
-返回的 profiles[0]，校验其 profile_data。规则对照 01 §1.1 的实测 schema。
+不调 LLM、不调 EverOS（纯函数，分层不串味）；输入是 client.get(profile)
+返回的 profiles[0]，校验其 profile_data。
 """
 
 from __future__ import annotations

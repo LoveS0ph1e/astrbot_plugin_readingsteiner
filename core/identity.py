@@ -1,21 +1,18 @@
 """身份解析：AstrBot event → EverOS 身份元组。隔离正确性的命门。
 
-# ════════════════ 铁律（违反即重蹈审计 §15.9 跨用户串线）════════════════
+# ════════════════ 铁律（违反即导致跨用户记忆串线）════════════════
 # 铁律 1：user_id 必须来自 event 的真实发送者 QQ 号，不接受外部/LLM 传参。
 # 铁律 2：取不到有效 user_id 时返回 None，调用方跳过记忆——绝不回退 "default"。
 # 铁律 3：检索只用单一 user_id，绝不轮询 [uid, "default"]。
-# 反面教材：astrbot_plugin_everos_integration/tools/everos_tools.py:
-#   - 第65行  resolved_user_id = user_id or persona_name or "default"   ← 违反铁律1/2
-#   - 第227行 candidate_uids = [resolved_user_id, "default"]            ← 违反铁律3
 # ═══════════════════════════════════════════════════════════════════════
 
-身份取值全部基于 AstrBot 官方方法（astr_message_event.py 实证，01 §3.5）：
-- user_id   = event.get_sender_id()        （QQ 号，astr_message_event.py:202-207）
-- session_id= event.unified_msg_origin     （会话唯一标识，property:103-112）
-- is_group  = event.get_group_id() != ""   （私聊返 ""，:194-196）
-- bot_id    = event.get_self_id()          （assistant sender_id，:198-200）
+身份取值全部基于 AstrBot 官方方法：
+- user_id   = event.get_sender_id()        （QQ 号）
+- session_id= event.unified_msg_origin     （会话唯一标识）
+- is_group  = event.get_group_id() != ""   （私聊返 ""）
+- bot_id    = event.get_self_id()          （assistant sender_id）
 
-本模块只读 event + config，不调 EverOS（分层不串味，05 §三）。
+本模块只读 event + config，不调 EverOS（分层不串味）。
 """
 
 from __future__ import annotations
@@ -58,7 +55,7 @@ def _cfg(config, key: str, default):
 def resolve(event: AstrMessageEvent, config=None) -> Identity | None:
     """从 event 确定性解析身份。取不到 user_id 返回 None（铁律 2）。
 
-    全部用 AstrBot 官方方法（01 §3.5）。鸭子类型调用，便于单测传 mock event。
+    全部用 AstrBot 官方方法。鸭子类型调用，便于单测传 mock event。
     """
     user_id = event.get_sender_id()
     if not user_id:  # 铁律 2：取不到不兜底，返回 None 让调用方跳过
