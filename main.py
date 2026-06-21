@@ -200,6 +200,33 @@ class ReadingSteinerPlugin(Star):
         except Exception as e:
             logger.error(f"{LOG_PREFIX} on_llm_response 失败: {e}", exc_info=True)
 
+    # ────────────────── LLM 工具（function-calling） ──────────────────
+    # 让模型在对话中主动查/写记忆。身份只从 event 取（铁律 1/3），
+    # 模型只能传 query/content，绝不传 user_id —— 从源头杜绝跨用户串线。
+
+    @filter.llm_tool(name="epk_recall")
+    async def epk_recall(self, event: AstrMessageEvent, query: str):
+        """Recall the current user's long-term memory relevant to a query.
+
+        Covers the persistent profile and past episodes. Use when you need to
+        remember who the user is or what they told you before.
+
+        Args:
+            query(string): What to look up in the user's memory, in natural language.
+        """
+        return await handlers.recall_impl(self, event, query)
+
+    @filter.llm_tool(name="epk_remember")
+    async def epk_remember(self, event: AstrMessageEvent, content: str):
+        """Save a fact about the current user into long-term memory.
+
+        Use when the user shares a durable preference or fact worth remembering.
+
+        Args:
+            content(string): The fact to remember, as a complete self-contained sentence.
+        """
+        return await handlers.remember_impl(self, event, content)
+
     # ────────────────── /epk 命令组 ──────────────────
     # /epk = El Psy Kongroo 缩写
     # 范式：Mnemosyne/main.py:642-741（command_group + impl 代理 + permission_type + confirm）

@@ -23,6 +23,12 @@
     "type": "bool",
     "default": true
   },
+  "enable_llm_tools": {
+    "description": "启用 LLM 记忆工具（function-calling）",
+    "hint": "开后 LLM 可主动调 epk_recall 查记忆 / epk_remember 写记忆；身份只取自消息发送者，模型无法指定他人。默认关，避免与自动注入重复消耗",
+    "type": "bool",
+    "default": false
+  },
   "injection_target": {
     "description": "注入目标",
     "hint": "user_prompt（推荐，记忆作用户轮上下文，system_prompt 留给人格独占，不破坏角色风格与前缀缓存）或 system_prompt",

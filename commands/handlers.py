@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..core import archiving, injection, profile_quality, visibility
 from ..core import identity as identity_mod
-from ..core import profile_quality
 from ..core.constants import LOG_PREFIX, MEMORY_TYPE_EPISODE, MEMORY_TYPE_PROFILE
 from ..core.everos_client import EverOSUnavailable
 
@@ -158,6 +158,66 @@ async def quality_impl(plugin, event: AstrMessageEvent):
         f"{LOG_PREFIX} Profile quality check (user_id={ident.user_id}):\n"
         + profile_quality.format_report(report)
     )
+
+
+async def recall_impl(plugin, event: AstrMessageEvent, query: str) -> str:
+    """LLM 工具 epk_recall 的逻辑：检索当前用户记忆，返回文本给模型。
+
+    身份只从 event 解析（铁律 1/3），模型传入的任何 user_id 都不被采纳。
+    ⚠️ 始终返回非空 str：AstrBot 的 llm_tool 把 None 当作"已直接回复用户"，
+       会触发 WARN 并可能静默吞掉本轮回复。无记忆/不可用时返回明确说明，
+       让模型据此正常应答（对新用户，"无记忆"正是应当告知模型的信号）。
+    """
+    if not plugin.config.get("enable_llm_tools", False):
+        return "Memory tool is disabled."
+    ident = identity_mod.resolve(event, plugin.config)
+    if ident is None:
+        return "Cannot resolve the user's identity; no memory available."
+    if not await plugin._healthy():
+        return "Memory service is currently unavailable."
+    try:
+        data = await plugin.client.search(
+            query=query,
+            user_id=ident.user_id,  # 铁律：单一真实身份，绝不取模型传参
+            app_id=ident.app_id,
+            project_id=ident.project_id,
+            method=plugin.config.get("search_method", "hybrid"),
+            top_k=int(plugin.config.get("search_top_k", 5)),
+            include_profile=plugin.config.get("include_profile", True),
+        )
+    except EverOSUnavailable:
+        return "Memory service is currently unavailable."
+    profiles = data.get("profiles", []) or []
+    episodes = data.get("episodes", []) or []
+    if plugin.config.get("group_public_only", True) and ident.is_group:
+        profiles, episodes = visibility.filter_public(profiles, episodes)
+    text = injection.build_text(profiles, episodes, plugin.config)
+    return text or "No stored memory found for this user yet."
+
+
+async def remember_impl(plugin, event: AstrMessageEvent, content: str) -> str:
+    """LLM 工具 epk_remember 的逻辑：把一条事实主动写入当前用户记忆。
+
+    身份只从 event 解析；写入走与自动归档相同的 add 通道（sender_id=真实 QQ 号）。
+    ⚠️ 始终返回非空 str（理由同 recall_impl）：失败/禁用也给模型明确反馈。
+    """
+    if not plugin.config.get("enable_llm_tools", False):
+        return "Memory tool is disabled."
+    if not content or not content.strip():
+        return "Nothing to remember (empty content)."
+    ident = identity_mod.resolve(event, plugin.config)
+    if ident is None:
+        return "Cannot resolve the user's identity; nothing was saved."
+    if not await plugin._healthy():
+        return "Memory service is currently unavailable; nothing was saved."
+    try:
+        msgs = archiving.build_messages(content.strip(), "", ident)
+        await plugin.client.add(ident.session_id, msgs, ident.app_id, ident.project_id)
+        if plugin._flush_policy:
+            plugin._flush_policy.mark_active(ident.session_id)
+    except EverOSUnavailable:
+        return "Memory service is currently unavailable; nothing was saved."
+    return "Noted. I'll remember that."
 
 
 async def help_impl(plugin, event: AstrMessageEvent):
