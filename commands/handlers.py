@@ -25,21 +25,23 @@ async def status_impl(plugin, event: AstrMessageEvent):
     healthy = await plugin._healthy()
     if not healthy:
         yield event.plain_result(
-            f"{LOG_PREFIX} EverOS: 未连接 ({base_url})\n"
-            "请确认 EverOS 容器已 up、base_url 配置正确。"
+            f"{LOG_PREFIX} EverOS: disconnected ({base_url})\n"
+            "Check that the EverOS container is up and base_url is correct."
         )
         return
     ident = identity_mod.resolve(event, plugin.config)
     if ident is None:
-        yield event.plain_result(f"{LOG_PREFIX} EverOS: 已连接 ({base_url})\n当前无法解析身份。")
+        yield event.plain_result(
+            f"{LOG_PREFIX} EverOS: connected ({base_url})\nCannot resolve identity."
+        )
         return
     lines = [
-        f"{LOG_PREFIX} EverOS: 已连接 ({base_url})",
-        f"会话: {'群聊' if ident.is_group else '私聊'} / user_id={ident.user_id}",
+        f"{LOG_PREFIX} EverOS: connected ({base_url})",
+        f"session: {'group' if ident.is_group else 'private'} / user_id={ident.user_id}",
         f"scope: app_id={ident.app_id} project_id={ident.project_id}",
     ]
     try:
-        for mtype, label in ((MEMORY_TYPE_PROFILE, "画像"), (MEMORY_TYPE_EPISODE, "情景")):
+        for mtype, label in ((MEMORY_TYPE_PROFILE, "profile"), (MEMORY_TYPE_EPISODE, "episode")):
             data = await plugin.client.get(
                 memory_type=mtype,
                 user_id=ident.user_id,
@@ -48,23 +50,23 @@ async def status_impl(plugin, event: AstrMessageEvent):
                 page=1,
                 page_size=1,
             )
-            lines.append(f"{label}: {data.get('total_count', 0)} 条")
+            lines.append(f"{label}: {data.get('total_count', 0)}")
     except EverOSUnavailable as e:
-        lines.append(f"（记忆计数获取失败: {e}）")
+        lines.append(f"(failed to get memory counts: {e})")
     yield event.plain_result("\n".join(lines))
 
 
 async def search_impl(plugin, event: AstrMessageEvent, query: str):
     """/epk search <query>：按当前用户检索并展示命中（调试/自查用）。"""
     if not query:
-        yield event.plain_result("用法：/epk search <要查询的内容>")
+        yield event.plain_result("Usage: /epk search <query>")
         return
     ident = identity_mod.resolve(event, plugin.config)
     if ident is None:
-        yield event.plain_result(f"{LOG_PREFIX} 无法解析身份，跳过检索。")
+        yield event.plain_result(f"{LOG_PREFIX} Cannot resolve identity, skipping search.")
         return
     if not await plugin._healthy():
-        yield event.plain_result(f"{LOG_PREFIX} EverOS 未连接。")
+        yield event.plain_result(f"{LOG_PREFIX} EverOS not connected.")
         return
     try:
         data = await plugin.client.search(
@@ -77,14 +79,14 @@ async def search_impl(plugin, event: AstrMessageEvent, query: str):
             include_profile=plugin.config.get("include_profile", True),
         )
     except EverOSUnavailable as e:
-        yield event.plain_result(f"{LOG_PREFIX} 检索失败: {e}")
+        yield event.plain_result(f"{LOG_PREFIX} Search failed: {e}")
         return
     profiles = data.get("profiles", []) or []
     episodes = data.get("episodes", []) or []
-    lines = [f"{LOG_PREFIX} 检索结果（user_id={ident.user_id}）："]
-    lines.append(f"画像 {len(profiles)} 条 / 情景 {len(episodes)} 条")
+    lines = [f"{LOG_PREFIX} Search results (user_id={ident.user_id}):"]
+    lines.append(f"profiles: {len(profiles)} / episodes: {len(episodes)}")
     for i, ep in enumerate(episodes[:5], 1):
-        summary = ep.get("summary") or ep.get("subject") or "(无摘要)"
+        summary = ep.get("summary") or ep.get("subject") or "(no summary)"
         score = ep.get("score")
         lines.append(f"{i}. [{score}] {str(summary)[:80]}")
     yield event.plain_result("\n".join(lines))
@@ -94,18 +96,18 @@ async def flush_impl(plugin, event: AstrMessageEvent):
     """/epk flush：手动 flush 当前会话（manual 策略下的主触发）。"""
     ident = identity_mod.resolve(event, plugin.config)
     if ident is None:
-        yield event.plain_result(f"{LOG_PREFIX} 无法解析身份。")
+        yield event.plain_result(f"{LOG_PREFIX} Cannot resolve identity.")
         return
     if not await plugin._healthy():
-        yield event.plain_result(f"{LOG_PREFIX} EverOS 未连接。")
+        yield event.plain_result(f"{LOG_PREFIX} EverOS not connected.")
         return
     try:
         data = await plugin.client.flush(ident.session_id, ident.app_id, ident.project_id)
         if plugin._flush_policy:
             plugin._flush_policy.discard(ident.session_id)
-        yield event.plain_result(f"{LOG_PREFIX} flush 完成，status={data.get('status', '?')}")
+        yield event.plain_result(f"{LOG_PREFIX} flush done, status={data.get('status', '?')}")
     except EverOSUnavailable as e:
-        yield event.plain_result(f"{LOG_PREFIX} flush 失败: {e}")
+        yield event.plain_result(f"{LOG_PREFIX} flush failed: {e}")
 
 
 async def forget_impl(plugin, event: AstrMessageEvent, confirm: str | None = None):
@@ -116,10 +118,11 @@ async def forget_impl(plugin, event: AstrMessageEvent, confirm: str | None = Non
     只能如实告知正确做法：EverOS 记忆是磁盘上的 markdown，删除需在 EverOS 侧操作。
     """
     yield event.plain_result(
-        f"{LOG_PREFIX} EverOS v1 API 无删除端点，插件无法代为删除记忆。\n"
-        "EverOS 的记忆以 markdown 存于数据目录（默认 ~/.everos 或容器 /data/everos），"
-        "如需删除请在 EverOS 侧删除对应 user 目录的 md 文件后，重建索引（.index/ 可重建）。\n"
-        "详见 EverOS 官方 storage_layout 文档。"
+        f"{LOG_PREFIX} EverOS v1 API has no delete endpoint; the plugin cannot delete memories.\n"
+        "EverOS stores memories as markdown in its data dir "
+        "(default ~/.everos or container /data/everos). To delete, remove the md files under "
+        "the user's dir on the EverOS side, then rebuild the index (.index/ is rebuildable).\n"
+        "See the EverOS official storage_layout docs."
     )
 
 
@@ -127,10 +130,10 @@ async def quality_impl(plugin, event: AstrMessageEvent):
     """/epk quality：抽查当前用户画像的提取质量（规则校验，无 LLM）。"""
     ident = identity_mod.resolve(event, plugin.config)
     if ident is None:
-        yield event.plain_result(f"{LOG_PREFIX} 无法解析身份。")
+        yield event.plain_result(f"{LOG_PREFIX} Cannot resolve identity.")
         return
     if not await plugin._healthy():
-        yield event.plain_result(f"{LOG_PREFIX} EverOS 未连接。")
+        yield event.plain_result(f"{LOG_PREFIX} EverOS not connected.")
         return
     try:
         data = await plugin.client.get(
@@ -142,17 +145,18 @@ async def quality_impl(plugin, event: AstrMessageEvent):
             page_size=1,
         )
     except EverOSUnavailable as e:
-        yield event.plain_result(f"{LOG_PREFIX} 画像获取失败: {e}")
+        yield event.plain_result(f"{LOG_PREFIX} Failed to get profile: {e}")
         return
     profiles = data.get("profiles", []) or []
     if not profiles:
         yield event.plain_result(
-            f"{LOG_PREFIX} 当前用户（user_id={ident.user_id}）尚无画像，多聊几轮后再查。"
+            f"{LOG_PREFIX} No profile yet for this user (user_id={ident.user_id}). "
+            "Chat a few more rounds and try again."
         )
         return
     report = profile_quality.check_profile(profiles[0])
     yield event.plain_result(
-        f"{LOG_PREFIX} 画像质量抽查（user_id={ident.user_id}）：\n"
+        f"{LOG_PREFIX} Profile quality check (user_id={ident.user_id}):\n"
         + profile_quality.format_report(report)
     )
 
@@ -160,12 +164,12 @@ async def quality_impl(plugin, event: AstrMessageEvent):
 async def help_impl(plugin, event: AstrMessageEvent):
     """/epk help：列出本插件真实存在的命令（与代码强一致，05 §三#5）。"""
     yield event.plain_result(
-        f"{LOG_PREFIX} ReadingSteiner 记忆插件命令：\n"
-        "/epk flush         手动归档当前会话（所有人）\n"
-        "/epk help          显示本帮助（所有人）\n"
-        "—— 以下需管理员权限 ——\n"
-        "/epk status        查看连接状态、当前身份与记忆计数\n"
-        "/epk search <内容>  按当前用户检索记忆（调试用）\n"
-        "/epk quality       抽查当前用户画像的提取质量\n"
-        "/epk forget        记忆删除说明（API 不支持，见提示）"
+        f"{LOG_PREFIX} ReadingSteiner memory plugin commands:\n"
+        "/epk flush         Archive the current session now (everyone)\n"
+        "/epk help          Show this help (everyone)\n"
+        "—— admin only below ——\n"
+        "/epk status        Connection status, current identity, memory counts\n"
+        "/epk search <q>    Search memories for the current user (debug)\n"
+        "/epk quality       Spot-check the current user's profile quality\n"
+        "/epk forget        Memory deletion notice (API unsupported, see message)"
     )

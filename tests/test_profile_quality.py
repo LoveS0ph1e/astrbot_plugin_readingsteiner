@@ -115,11 +115,11 @@ def test_score_monotonic_with_issues():
     assert clean.score > dirty.score
 
 
-def test_format_report_renders_chinese():
+def test_format_report_renders_report():
     report = check_profile({"profile_data": {"summary": "", "implicit_traits": []}})
     out = format_report(report)
-    assert "画像质量评分" in out
-    assert "不通过" in out  # 含 error
+    assert "Profile quality score" in out
+    assert "FAIL" in out  # 含 error
     assert any(sev in out for sev in ("❌", "⚠️"))
 
 

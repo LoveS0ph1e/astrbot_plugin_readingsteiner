@@ -71,7 +71,7 @@ def check_profile(profile: dict[str, Any]) -> QualityReport:
     if not isinstance(data, dict):
         return QualityReport(
             score=0,
-            issues=[Issue(SEVERITY_ERROR, "bad_shape", "profile_data 不是结构化对象，无法校验")],
+            issues=[Issue(SEVERITY_ERROR, "bad_shape", "profile_data is not a structured object")],
         )
 
     explicit = [x for x in (data.get(PROFILE_FIELD_EXPLICIT) or []) if isinstance(x, dict)]
@@ -105,10 +105,10 @@ def _check_required(data: dict, explicit: list, implicit: list) -> list[Issue]:
     out: list[Issue] = []
     summary = data.get(PROFILE_FIELD_SUMMARY)
     if not (isinstance(summary, str) and summary.strip()):
-        out.append(Issue(SEVERITY_ERROR, "missing_summary", "缺少总体印象 summary"))
+        out.append(Issue(SEVERITY_ERROR, "missing_summary", "missing summary"))
     if not explicit and not implicit:
         out.append(
-            Issue(SEVERITY_ERROR, "no_traits", "显式信息与隐含特质均为空，画像无实质内容")
+            Issue(SEVERITY_ERROR, "no_traits", "both explicit_info and implicit_traits empty")
         )
     return out
 
@@ -117,14 +117,12 @@ def _check_structure(explicit: list, implicit: list) -> list[Issue]:
     out: list[Issue] = []
     for idx, item in enumerate(explicit):
         if not (item.get(PROFILE_KEY_DESCRIPTION) or "").strip():
-            out.append(
-                Issue(SEVERITY_ERROR, "explicit_no_desc", f"显式信息第 {idx + 1} 条缺 description")
-            )
+            msg = f"explicit_info #{idx + 1} missing description"
+            out.append(Issue(SEVERITY_ERROR, "explicit_no_desc", msg))
     for idx, item in enumerate(implicit):
         if not (item.get(PROFILE_KEY_TRAIT) or "").strip():
-            out.append(
-                Issue(SEVERITY_ERROR, "trait_no_name", f"隐含特质第 {idx + 1} 条缺 trait 名")
-            )
+            msg = f"implicit_trait #{idx + 1} missing trait name"
+            out.append(Issue(SEVERITY_ERROR, "trait_no_name", msg))
     return out
 
 
@@ -133,15 +131,13 @@ def _check_evidence(explicit: list, implicit: list) -> list[Issue]:
     out: list[Issue] = []
     for idx, item in enumerate(explicit):
         if not (item.get(PROFILE_KEY_EVIDENCE) or "").strip():
-            out.append(
-                Issue(SEVERITY_WARN, "explicit_no_evidence", f"显式信息第 {idx + 1} 条缺证据溯源")
-            )
+            msg = f"explicit_info #{idx + 1} missing evidence"
+            out.append(Issue(SEVERITY_WARN, "explicit_no_evidence", msg))
     for idx, item in enumerate(implicit):
         if not (item.get(PROFILE_KEY_EVIDENCE) or "").strip():
-            trait = (item.get(PROFILE_KEY_TRAIT) or f"第{idx + 1}条").strip()
-            out.append(
-                Issue(SEVERITY_WARN, "trait_no_evidence", f"特质「{trait}」缺证据溯源（疑似臆测）")
-            )
+            trait = (item.get(PROFILE_KEY_TRAIT) or f"#{idx + 1}").strip()
+            msg = f"trait '{trait}' missing evidence (possible fabrication)"
+            out.append(Issue(SEVERITY_WARN, "trait_no_evidence", msg))
     return out
 
 
@@ -153,7 +149,7 @@ def _check_duplicates(implicit: list) -> list[Issue]:
         if not trait:
             continue
         if trait in seen:
-            out.append(Issue(SEVERITY_WARN, "duplicate_trait", f"特质「{trait}」重复出现"))
+            out.append(Issue(SEVERITY_WARN, "duplicate_trait", f"trait '{trait}' is duplicated"))
         seen.add(trait)
     return out
 
@@ -162,27 +158,28 @@ def _check_length(data: dict, explicit: list, implicit: list) -> list[Issue]:
     out: list[Issue] = []
     summary = data.get(PROFILE_FIELD_SUMMARY) or ""
     if isinstance(summary, str) and len(summary) > SUMMARY_MAX_LEN:
-        msg = f"summary 过长（{len(summary)}>{SUMMARY_MAX_LEN}）"
+        msg = f"summary too long ({len(summary)}>{SUMMARY_MAX_LEN})"
         out.append(Issue(SEVERITY_WARN, "summary_too_long", msg))
     for item in explicit + implicit:
         desc = item.get(PROFILE_KEY_DESCRIPTION) or ""
         if isinstance(desc, str) and len(desc) > DESC_MAX_LEN:
-            msg = f"某条 description 过长（{len(desc)}>{DESC_MAX_LEN}）"
+            msg = f"a description is too long ({len(desc)}>{DESC_MAX_LEN})"
             out.append(Issue(SEVERITY_WARN, "desc_too_long", msg))
     return out
 
 
 def format_report(report: QualityReport) -> str:
-    """渲染为命令可直接输出的中文报告。"""
-    verdict = "通过" if report.ok else "不通过（含结构性缺陷）"
+    """渲染为命令可直接输出的英文报告。"""
+    verdict = "PASS" if report.ok else "FAIL (structural defects)"
     lines = [
-        f"画像质量评分：{report.score}/100 — {verdict}",
-        f"显式信息 {report.stats.get('explicit_count', 0)} 条 / "
-        f"隐含特质 {report.stats.get('implicit_count', 0)} 条 / "
-        f"问题 {report.stats.get('error_count', 0)} 错 {report.stats.get('warn_count', 0)} 警",
+        f"Profile quality score: {report.score}/100 — {verdict}",
+        f"explicit: {report.stats.get('explicit_count', 0)} / "
+        f"implicit: {report.stats.get('implicit_count', 0)} / "
+        f"issues: {report.stats.get('error_count', 0)} errors, "
+        f"{report.stats.get('warn_count', 0)} warnings",
     ]
     if not report.issues:
-        lines.append("✅ 未发现质量问题")
+        lines.append("✅ No quality issues found")
         return "\n".join(lines)
     for i in report.issues:
         mark = "❌" if i.severity == SEVERITY_ERROR else "⚠️"
