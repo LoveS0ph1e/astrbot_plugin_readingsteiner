@@ -61,6 +61,22 @@ python experiments/probe_everos_profile.py --base-url http://127.0.0.1:8000
 它会灌入 `experiments/sample_dialogue.json` → flush → search，把画像与情景 dump 到
 `experiments/everos-profile-probe.md` 供人工判断（详见该文件与 `docs/03` 任务 0）。
 
+## 生产环境注意事项（投产前必读）
+
+1. **EverOS 无内置鉴权**：默认绑 `127.0.0.1`，仅本机/同 docker 网络可达，本地安全。
+   ⚠️ **切勿把 8000 端口直接暴露公网**——任何人都能读写记忆。需公网访问请在前面加
+   带鉴权的网关（Nginx + Basic Auth / API 网关），并用防火墙限制来源。
+
+2. **进程自启**：用本目录 Docker 方案时 `restart: unless-stopped` 已保证容器随 Docker 自启。
+   若裸装（见下节），EverOS 是普通进程，**服务器重启后不会自动拉起**——记忆功能会静默失效。
+   生产环境务必配 systemd 守护（`everos server start` 作为 ExecStart），别用裸 `nohup`。
+
+3. **模型弃用时间线**：LLM 用 DeepSeek 时，旧模型名 `deepseek-chat` / `deepseek-reasoner`
+   于 **2026-07-24** 弃用，迁移到 `deepseek-v4-flash` / `deepseek-v4-pro`（见 `.env.example`）。
+
+4. **数据备份**：记忆是用户资产。定期备份具名卷 `everos_data`（或裸装的 `~/.everos`）：
+   `docker run --rm -v everos_data:/d -v $PWD:/b alpine tar czf /b/everos-backup.tar.gz -C /d .`
+
 ## Linux/macOS 裸装（不用 Docker）
 
 ```bash
