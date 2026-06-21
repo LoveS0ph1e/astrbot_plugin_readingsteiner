@@ -14,6 +14,7 @@
 契约出处：01-实证依据.md 第二部分（2.1 响应包络 / 2.2 add / 2.3 flush / 2.4 search）。
 本脚本纯 httpx，不依赖 AstrBot；输出落 experiments/everos-profile-probe.md。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -59,24 +60,28 @@ def build_messages(sample: dict) -> list[dict]:
     messages = []
     for i, turn in enumerate(sample["turns"]):
         is_user = turn["role"] == "user"
-        messages.append({
-            "sender_id": user_id if is_user else bot_id,
-            "role": "user" if is_user else "assistant",
-            "timestamp": base_ms + i * 10_000,
-            "content": turn["text"],
-        })
+        messages.append(
+            {
+                "sender_id": user_id if is_user else bot_id,
+                "role": "user" if is_user else "assistant",
+                "timestamp": base_ms + i * 10_000,
+                "content": turn["text"],
+            }
+        )
     return messages
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="EverOS profile 提取质量探针")
-    parser.add_argument("--base-url", default="http://127.0.0.1:8000",
-                        help="EverOS 服务地址（默认 127.0.0.1:8000）")
+    parser.add_argument(
+        "--base-url", default="http://127.0.0.1:8000", help="EverOS 服务地址（默认 127.0.0.1:8000）"
+    )
     parser.add_argument("--app-id", default="default")
     parser.add_argument("--project-id", default="default")
     parser.add_argument("--top-k", type=int, default=5)
-    parser.add_argument("--settle", type=float, default=3.0,
-                        help="flush 后等待索引落地的秒数（最终一致，01 §1.3）")
+    parser.add_argument(
+        "--settle", type=float, default=3.0, help="flush 后等待索引落地的秒数（最终一致，01 §1.3）"
+    )
     args = parser.parse_args()
 
     sample = json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
@@ -122,8 +127,9 @@ def main() -> int:
 
         # 2. flush（触发 LLM 提取）
         try:
-            flush_data = _post(client, base_url, "/api/v1/memory/flush",
-                               {"session_id": session_id, **scope})
+            flush_data = _post(
+                client, base_url, "/api/v1/memory/flush", {"session_id": session_id, **scope}
+            )
         except (httpx.HTTPError, RuntimeError) as e:
             out(f"**flush 失败**：{e}")
             REPORT_PATH.write_text("\n".join(report), encoding="utf-8")
@@ -139,8 +145,14 @@ def main() -> int:
         first_profile_dump = None
         for i, q in enumerate(QUERIES, 1):
             search_payload = {
-                "user_id": user_id, **scope, "query": q,
-                "method": "hybrid", "top_k": args.top_k,
+                "user_id": user_id,
+                **scope,
+                "query": q,
+                # vector 而非 hybrid：DashScope 无 OpenAI 协议 rerank，hybrid 会触发 rerank。
+                # 任务0 验证的是画像质量(LLM提取+embedding索引)，rerank 只影响 episode 排序，
+                # 对 profile_data 零影响。生产代码 search_method 仍可配 hybrid（配 rerank key 后）。
+                "method": "vector",
+                "top_k": args.top_k,
                 "include_profile": True,
             }
             try:
@@ -155,8 +167,7 @@ def main() -> int:
             out(f"### 查询 {i}: {q}\n")
             out(f"- profiles: {len(profiles)} 条 / episodes: {len(episodes)} 条\n")
             ep_brief = [
-                {"score": e.get("score"), "subject": e.get("subject"),
-                 "summary": e.get("summary")}
+                {"score": e.get("score"), "subject": e.get("subject"), "summary": e.get("summary")}
                 for e in episodes
             ]
             out("**episodes（score/subject/summary）**:\n")
@@ -167,17 +178,28 @@ def main() -> int:
         if first_profile_dump:
             out(f"```json\n{json.dumps(first_profile_dump, ensure_ascii=False, indent=2)}\n```\n")
         else:
-            out("**未返回任何 profile**。可能原因：flush 后画像聚类尚未生成、"
-                "或样本量不足以触发 profile 提取。可加大样本或多 flush 几轮再试。\n")
+            out(
+                "**未返回任何 profile**。可能原因：flush 后画像聚类尚未生成、"
+                "或样本量不足以触发 profile 提取。可加大样本或多 flush 几轮再试。\n"
+            )
 
         # 5. get profile 直取（KV lookup，不经相似度）
         out("## 5. get profile（KV 直取，memory_type=profile）\n")
         try:
-            get_data = _post(client, base_url, "/api/v1/memory/get", {
-                "user_id": user_id, **scope, "memory_type": "profile",
-                "page": 1, "page_size": 20,
-                "sort_by": "updated_at", "sort_order": "desc",
-            })
+            get_data = _post(
+                client,
+                base_url,
+                "/api/v1/memory/get",
+                {
+                    "user_id": user_id,
+                    **scope,
+                    "memory_type": "profile",
+                    "page": 1,
+                    "page_size": 20,
+                    "sort_by": "updated_at",
+                    "sort_order": "desc",
+                },
+            )
             out(f"- total_count: {get_data.get('total_count')} / count: {get_data.get('count')}\n")
             out(f"```json\n{json.dumps(get_data, ensure_ascii=False, indent=2)}\n```\n")
         except (httpx.HTTPError, RuntimeError) as e:
