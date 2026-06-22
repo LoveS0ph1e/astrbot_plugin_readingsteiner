@@ -39,8 +39,18 @@ class ReadingSteinerPlugin(Star):
         super().__init__(context)
         self.context = context
         self.config = config
-        self.client: EverOSClient | None = None
-        self._flush_policy: archiving.FlushPolicy | None = None
+        # client/flush_policy 在 __init__ 同步构造：实例存在即记忆能力就绪，不依赖
+        # on_astrbot_loaded 触发。该钩子在插件热重载竞态下可能不触发，旧版把构造放在
+        # 那里曾致 client 永为 None、注入与归档双双静默失能。二者构造均不需事件循环。
+        self.client: EverOSClient | None = EverOSClient(
+            config.get("everos_base_url", DEFAULT_BASE_URL),
+            float(config.get("request_timeout", 30)),
+        )
+        self._flush_policy: archiving.FlushPolicy | None = archiving.FlushPolicy(
+            config.get("archive_strategy", ARCHIVE_AUTO),
+            int(config.get("flush_idle_seconds", 1800)),
+            int(config.get("flush_every_n_turns", 0)),
+        )
         self._bg_task: asyncio.Task | None = None
         self._everos_up: bool | None = None  # 健康状态;None=首次未探测，用于跳变告警节流
 
@@ -48,21 +58,22 @@ class ReadingSteinerPlugin(Star):
 
     @filter.on_astrbot_loaded()
     async def on_loaded(self):
-        """AstrBot 就绪后初始化 client 与 auto-flush 后台任务（健康探测惰性化）。"""
+        """AstrBot 就绪后：健康探测打日志 + 启动 auto-flush 后台任务。
+
+        client/flush_policy 已在 __init__ 构造（不依赖本钩子触发）；本钩子只做需要
+        事件循环的事——健康探测与后台任务启动。重载竞态下本钩子若未触发，注入/归档/
+        轮数 flush 仍正常（靠 __init__ 的 client），仅静默兜底 flush 缺席（消息已落
+        buffer 不丢，下次轮数到或手动 flush 照常提取）。
+        """
         try:
-            self.client = EverOSClient(
-                self.config.get("everos_base_url", DEFAULT_BASE_URL),
-                float(self.config.get("request_timeout", 30)),
-            )
-            self._flush_policy = archiving.FlushPolicy(
-                self.config.get("archive_strategy", ARCHIVE_AUTO),
-                int(self.config.get("flush_idle_seconds", 1800)),
-                int(self.config.get("flush_every_n_turns", 0)),
-            )
             ok = await self._healthy()
             state = "已连接" if ok else "暂不可达（将惰性重试）"
             logger.info(f"{LOG_PREFIX} 初始化完成，EverOS {state}")
-            if self._flush_policy.strategy == ARCHIVE_AUTO:
+            if (
+                self._flush_policy is not None
+                and self._flush_policy.strategy == ARCHIVE_AUTO
+                and self._bg_task is None  # 幂等：重载竞态下重复触发不再叠起后台任务
+            ):
                 self._bg_task = asyncio.create_task(self._auto_flush_loop())
         except Exception as e:
             logger.error(f"{LOG_PREFIX} 初始化失败: {e}", exc_info=True)
