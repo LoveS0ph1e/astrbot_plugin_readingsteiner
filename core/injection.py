@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -41,19 +42,48 @@ def _cfg(config, key: str, default):
     return getter(key, default) if callable(getter) else default
 
 
+def resolve_covenant(config, user_id) -> str:
+    """取指定用户的「永恒铭契」(ETERNAL_COVENANT)——人工锁定的不变核心设定。
+
+    配置项 eternal_covenant 是 JSON 文本：{"<user_id>": "<固定核心设定>", ...}。
+    命中则返回该用户的铭契文本，作为注入首块（不可变 canon，优先于 EverOS 演进画像）。
+    无配置 / user_id 空 / JSON 非法 / 结构不符 / 未命中 → 返回 ''（安全降级，绝不阻断注入）。
+
+    纯函数（不 log、不引 astrbot），延续本模块零运行时依赖、测试免 mock 的性质；
+    配置正确性由部署期真机验证兜底。
+    """
+    if not user_id:
+        return ""
+    raw = _cfg(config, "eternal_covenant", "")
+    if not raw or not isinstance(raw, str):
+        return ""
+    try:
+        table = json.loads(raw)
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(table, dict):
+        return ""
+    text = table.get(str(user_id))
+    return text.strip() if isinstance(text, str) and text.strip() else ""
+
+
 def build_text(
     profiles: list[dict[str, Any]],
     episodes: list[dict[str, Any]],
     config=None,
+    covenant: str = "",
 ) -> str:
-    """拼装注入文本（画像段 + 情景段）。都为空返回 ''（调用方据此跳过注入）。
+    """拼装注入文本（永恒铭契 + 画像段 + 情景段）。都为空返回 ''（调用方据此跳过注入）。
 
-    - profiles[0].profile_data 渲染为「用户长期印象」（恒注入）
+    - covenant：永恒铭契（人工锁定的不变核心设定），非空则作首块，置于演进画像之上
+    - profiles[0].profile_data 渲染为「用户长期印象」（恒注入，由 EverOS LLM 演进）
     - episodes[] 渲染为「相关情景记忆」（检索侧已按 score 排序/截断）
     """
     prefix = _cfg(config, "memory_prefix", DEFAULT_MEMORY_PREFIX)
     suffix = _cfg(config, "memory_suffix", DEFAULT_MEMORY_SUFFIX)
     parts: list[str] = []
+    if covenant and covenant.strip():
+        parts.append("【永恒铭契】\n" + covenant.strip())
     if profiles:
         rendered = _render_profile(profiles[0])
         if rendered:

@@ -7,9 +7,9 @@
   },
   "request_timeout": {
     "description": "HTTP 请求超时（秒）",
-    "hint": "EverOS 不可达或超时按『无记忆』降级，不阻断对话",
+    "hint": "EverOS 不可达或超时按『无记忆』降级，不阻断对话。flush 触发 v4-pro 提取较慢，建议 ≥90 避免假失败",
     "type": "int",
-    "default": 30
+    "default": 90
   },
   "enable_injection": {
     "description": "启用自动记忆注入",
@@ -114,6 +114,12 @@
     "hint": "visibility 方案A：群聊时跳过情景细节，只注入画像公开摘要，防隐私泄露",
     "type": "bool",
     "default": true
+  },
+  "eternal_covenant": {
+    "description": "永恒铭契（ETERNAL_COVENANT）：为指定用户锁定的不变核心设定",
+    "hint": "JSON：{\"<QQ号>\": \"<固定核心设定文本>\"}。注入时作为【永恒铭契】块置于演进画像之上，永不被 EverOS 的 flush 重写覆盖；EverOS 自动提取的 summary/显式/隐式不受影响、继续演进。含私密内容时群聊默认不注入（受 group_public_only 约束）",
+    "type": "string",
+    "default": ""
   },
   "enabled_sessions": {
     "description": "会话白名单（逗号分隔，留空=全部启用）",

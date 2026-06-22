@@ -163,9 +163,14 @@ class ReadingSteinerPlugin(Star):
             )
             profiles = data.get("profiles", []) or []
             episodes = data.get("episodes", []) or []
-            if self.config.get("group_public_only", True) and ident.is_group:
+            # 群聊私密层抑制：丢情景细节，且不注入永恒铭契（含山盟海誓/学历=私密）
+            suppress_private = self.config.get("group_public_only", True) and ident.is_group
+            if suppress_private:
                 profiles, episodes = visibility.filter_public(profiles, episodes)
-            text = injection.build_text(profiles, episodes, self.config)
+                covenant = ""
+            else:
+                covenant = injection.resolve_covenant(self.config, ident.user_id)
+            text = injection.build_text(profiles, episodes, self.config, covenant=covenant)
             injection.inject(
                 req,
                 text,
