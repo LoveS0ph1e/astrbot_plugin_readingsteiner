@@ -68,6 +68,71 @@ def test_build_text_everos_schema_clean_chinese():
     assert "{'" not in text
 
 
+def test_build_text_summary_dedup_when_equals_explicit_first():
+    """summary 去重：everalgo `_build_summary` 把 summary 回填为 explicit_info[0].description；
+    与首条显式特征逐字雷同时不再渲染【总体印象】(免重复+免首印象偏置)，
+    但该条仍在【显式信息】中保留(内容无损)。"""
+    dup = "周末常去城郊爬山，下山后会找家咖啡馆坐很久"
+    profiles = [
+        {
+            "profile_data": {
+                "summary": dup,  # == explicit_info[0].description（everalgo 回填行为）
+                "explicit_info": [
+                    {"category": "户外爱好", "description": dup, "evidence": "X"},
+                    {"category": "职业", "description": "在一家设计工作室上班", "evidence": "Y"},
+                ],
+                "implicit_traits": [],
+            }
+        }
+    ]
+    text = build_text(profiles, [], None)
+    assert "总体印象：" not in text  # summary 块被判重跳过
+    assert "显式信息：" in text
+    assert f"- [户外爱好] {dup}" in text  # 内容无损，仍在显式信息中
+    assert "- [职业] 在一家设计工作室上班" in text
+
+
+def test_build_text_summary_kept_when_distinct():
+    """自愈：summary 若是真正独立的总结(与任何显式/隐含特征都不雷同)，照常渲染。
+    为 EverOS/everalgo 将来产出真 summary、或插件侧合成注入预留。"""
+    profiles = [
+        {
+            "profile_data": {
+                "summary": "整体是个热爱户外、做事麻利的上班族",  # 独立总结
+                "explicit_info": [
+                    {"category": "户外爱好", "description": "喜欢爬山"},
+                ],
+                "implicit_traits": [
+                    {"trait": "行动力强", "description": "想到就做"},
+                ],
+            }
+        }
+    ]
+    text = build_text(profiles, [], None)
+    assert "总体印象：整体是个热爱户外、做事麻利的上班族" in text
+
+
+def test_build_text_overall_impression_overrides_everos_summary():
+    """整体印象覆盖：提供 overall_impression(插件合成的 k_makise 视角印象)→ 作为【总体印象】，
+    且彻底取代 EverOS 的伪 summary(即便后者与 explicit 雷同也不再出现)。"""
+    dup = "周末常去城郊爬山"
+    profiles = [
+        {
+            "profile_data": {
+                "summary": dup,  # everalgo 伪 summary
+                "explicit_info": [{"category": "户外爱好", "description": dup}],
+                "implicit_traits": [{"trait": "行动力强", "description": "想到就做"}],
+            }
+        }
+    ]
+    synth = "这是个嘴上嫌麻烦、却把每件小事都默默记在心上的人"
+    text = build_text(profiles, [], None, overall_impression=synth)
+    assert f"总体印象：{synth}" in text
+    assert "显式信息：" in text  # 显式/隐含照常渲染
+    assert "- [户外爱好] " + dup in text
+    assert text.count("总体印象：") == 1  # 只此一处总体印象，伪 summary 不再出现
+
+
 def test_build_text_episodes_with_time():
     eps = [{"timestamp": 1716885133000, "summary": "循环 Aimer 新专辑"}]
     text = build_text([], eps, None)

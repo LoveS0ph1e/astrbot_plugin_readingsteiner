@@ -121,6 +121,24 @@
     "type": "string",
     "default": ""
   },
+  "enable_overall_impression": {
+    "description": "启用「整体印象」合成",
+    "hint": "EverOS/everalgo 的 summary 实为第一条显式特征的逐字复制（非真总结）。开启后由插件用机器人 LLM 合成一句人格视角的真·整体印象，取代伪 summary 注入；仅在画像变化时后台合成一次（不阻塞回复、成本可忽略），结果缓存于 relationships/<user_id>.md。默认关，真机验证后再开",
+    "type": "bool",
+    "default": false
+  },
+  "overall_impression_max_chars": {
+    "description": "整体印象最大字数",
+    "hint": "合成 prompt 的长度约束；过长会稀释注入密度",
+    "type": "int",
+    "default": 80
+  },
+  "persona_display_name": {
+    "description": "人格显示名（合成整体印象时传给 LLM 的角色名）",
+    "hint": "仅用于合成 prompt「你是<此名>」，须填真实角色名（如 牧濑红莉栖）。代码/字段一律用机器标识，不在此处之外硬编码角色名",
+    "type": "string",
+    "default": "牧濑红莉栖"
+  },
   "enabled_sessions": {
     "description": "会话白名单（逗号分隔，留空=全部启用）",
     "hint": "填入 unified_msg_origin 片段以限定仅特定会话启用记忆",

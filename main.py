@@ -12,10 +12,10 @@ import contextlib
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import LLMResponse, ProviderRequest
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, StarTools, register
 
 from .commands import handlers
-from .core import archiving, injection, visibility
+from .core import archiving, injection, relationship, synthesis, visibility
 from .core import identity as identity_mod
 from .core.constants import (
     ARCHIVE_AUTO,
@@ -53,6 +53,14 @@ class ReadingSteinerPlugin(Star):
         )
         self._bg_task: asyncio.Task | None = None
         self._everos_up: bool | None = None  # 健康状态;None=首次未探测，用于跳变告警节流
+        # 关系层存储（整体印象缓存）：data_dir 取插件专属数据目录；初始化失败则禁用该
+        # 功能、不影响注入/归档主链路。_synth_inflight 去重，防同用户并发重复合成。
+        self._rel_store: relationship.RelationshipStore | None = None
+        try:
+            self._rel_store = relationship.RelationshipStore(str(StarTools.get_data_dir()))
+        except Exception as e:
+            logger.warning(f"{LOG_PREFIX} 关系层存储初始化失败，整体印象功能禁用: {e}")
+        self._synth_inflight: set[str] = set()
 
     # ────────────────── 生命周期 ──────────────────
 
@@ -138,6 +146,53 @@ class ReadingSteinerPlugin(Star):
             except Exception as e:
                 logger.warning(f"{LOG_PREFIX} auto-flush 循环异常: {e}")
 
+    # ────────────────── 整体印象（关系层合成） ──────────────────
+
+    def _resolve_overall_impression(self, user_id: str, profile: dict) -> str:
+        """读缓存的整体印象；画像已变则后台异步重算（不阻塞本轮回复，用旧值/空值过渡）。"""
+        profile_data = profile.get("profile_data") or {}
+        try:
+            rel = self._rel_store.get(user_id)
+            if self._rel_store.is_stale(user_id, profile_data):
+                self._schedule_synth(user_id, profile_data)
+            return rel.overall_impression if rel else ""
+        except Exception as e:
+            logger.warning(f"{LOG_PREFIX} 读取整体印象失败: {e}")
+            return ""
+
+    def _schedule_synth(self, user_id: str, profile_data: dict) -> None:
+        """后台合成整体印象并落盘；同用户在途则跳过（去重，防重复 LLM 调用）。"""
+        if user_id in self._synth_inflight:
+            return
+        self._synth_inflight.add(user_id)
+        asyncio.create_task(self._synth_and_store(user_id, profile_data))
+
+    async def _synth_and_store(self, user_id: str, profile_data: dict) -> None:
+        """后台任务：合成整体印象 → 落 relationship.md（带 source_hash）。失败仅告警。"""
+        try:
+            text = await synthesis.synthesize_impression(
+                profile_data.get("explicit_info"),
+                profile_data.get("implicit_traits"),
+                chat_fn=self._synth_chat,
+                persona_name=self.config.get("persona_display_name", ""),
+                max_chars=int(self.config.get("overall_impression_max_chars", 80)),
+            )
+            if text and self._rel_store is not None:
+                self._rel_store.put(user_id, text, relationship.profile_source_hash(profile_data))
+                logger.info(f"{LOG_PREFIX} 已更新用户 {user_id} 的整体印象")
+        except Exception as e:
+            logger.warning(f"{LOG_PREFIX} 整体印象合成失败: {e}")
+        finally:
+            self._synth_inflight.discard(user_id)
+
+    async def _synth_chat(self, prompt: str) -> str:
+        """chat_fn：用机器人当前 provider 跑一次合成；无 provider 抛错→上层吞成空印象。"""
+        provider = self.context.get_using_provider()
+        if provider is None:
+            raise RuntimeError("无可用 LLM provider")
+        resp = await provider.text_chat(prompt=prompt)
+        return resp.completion_text or ""
+
     # ────────────────── 开关/会话白名单 ──────────────────
 
     def _session_enabled(self, event: AstrMessageEvent) -> bool:
@@ -181,7 +236,22 @@ class ReadingSteinerPlugin(Star):
                 covenant = ""
             else:
                 covenant = injection.resolve_covenant(self.config, ident.user_id)
-            text = injection.build_text(profiles, episodes, self.config, covenant=covenant)
+            # 整体印象：仅非群聊（群聊连同私密一并抑制）且开启时注入；画像变化时后台刷新。
+            overall_impression = ""
+            if (
+                not suppress_private
+                and profiles
+                and self._rel_store is not None
+                and self.config.get("enable_overall_impression", False)
+            ):
+                overall_impression = self._resolve_overall_impression(ident.user_id, profiles[0])
+            text = injection.build_text(
+                profiles,
+                episodes,
+                self.config,
+                covenant=covenant,
+                overall_impression=overall_impression,
+            )
             injection.inject(
                 req,
                 text,

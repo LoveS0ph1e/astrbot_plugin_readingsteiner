@@ -72,10 +72,13 @@ def build_text(
     episodes: list[dict[str, Any]],
     config=None,
     covenant: str = "",
+    overall_impression: str = "",
 ) -> str:
     """拼装注入文本（永恒铭契 + 画像段 + 情景段）。都为空返回 ''（调用方据此跳过注入）。
 
     - covenant：永恒铭契（人工锁定的不变核心设定），非空则作首块，置于演进画像之上
+    - overall_impression：插件合成的「k_makise 视角整体印象」。非空则作画像段的
+      「总体印象」，取代 EverOS 的伪 summary（everalgo `_build_summary` 的 explicit[0] 复制）。
     - profiles[0].profile_data 渲染为「用户长期印象」（恒注入，由 EverOS LLM 演进）
     - episodes[] 渲染为「相关情景记忆」（检索侧已按 score 排序/截断）
     """
@@ -85,7 +88,7 @@ def build_text(
     if covenant and covenant.strip():
         parts.append("【永恒铭契】\n" + covenant.strip())
     if profiles:
-        rendered = _render_profile(profiles[0])
+        rendered = _render_profile(profiles[0], overall_impression=overall_impression)
         if rendered:
             parts.append("【用户长期印象】\n" + rendered)
     if episodes:
@@ -119,13 +122,14 @@ def inject(
         req.prompt = (cur + "\n" + text) if append else (text + "\n" + cur)
 
 
-def _render_profile(profile: dict[str, Any]) -> str:
+def _render_profile(profile: dict[str, Any], overall_impression: str = "") -> str:
     """渲染单条 profile。profile_data 是自由结构 object，防御式处理。
 
     优先按 EverOS 实测 schema（summary/explicit_info/implicit_traits）渲染成整洁中文；
     非该结构则回退到通用 key: value 平铺；str 则原样。
     注入只保留对人设有用的字段（总体印象/类别+描述/特质+标签），
     丢弃 evidence/basis/timestamp 等溯源字段（降噪省 token，质量校验另在 profile_quality）。
+    overall_impression 非空时作为「总体印象」（插件合成），仅 EverOS schema 分支生效。
     """
     data = profile.get("profile_data", profile)
     if isinstance(data, str):
@@ -135,18 +139,31 @@ def _render_profile(profile: dict[str, Any]) -> str:
     # 命中 EverOS 画像 schema → 结构化中文渲染
     schema_keys = (PROFILE_FIELD_SUMMARY, PROFILE_FIELD_EXPLICIT, PROFILE_FIELD_IMPLICIT)
     if any(k in data for k in schema_keys):
-        rendered = _render_everos_profile(data)
+        rendered = _render_everos_profile(data, overall_impression)
         if rendered:
             return rendered
     return _render_generic_dict(data)
 
 
-def _render_everos_profile(data: dict[str, Any]) -> str:
-    """EverOS 画像 schema → 整洁中文。三段：总体印象 / 显式信息 / 隐含特质。"""
+def _render_everos_profile(data: dict[str, Any], overall_impression: str = "") -> str:
+    """EverOS 画像 schema → 整洁中文。三段：总体印象 / 显式信息 / 隐含特质。
+
+    总体印象优先用 overall_impression（插件合成的 k_makise 视角整体印象）；缺省时回退到
+    EverOS 的 summary，但因 everalgo `_build_summary` 把它回填为 explicit_info[0] 的逐字
+    复制，故仅当 summary 与任一已渲染的显式/隐含特征都不雷同时才渲染（判重自愈）。
+    """
     blocks: list[str] = []
-    summary = data.get(PROFILE_FIELD_SUMMARY)
-    if isinstance(summary, str) and summary.strip():
-        blocks.append(f"总体印象：{summary.strip()}")
+    if overall_impression and overall_impression.strip():
+        # 插件合成的人格感知整体印象，取代 EverOS 的伪 summary。
+        blocks.append(f"总体印象：{overall_impression.strip()}")
+    else:
+        summary = data.get(PROFILE_FIELD_SUMMARY)
+        if (
+            isinstance(summary, str)
+            and summary.strip()
+            and not _is_duplicate_summary(summary, data)
+        ):
+            blocks.append(f"总体印象：{summary.strip()}")
 
     exp_lines = []
     for item in data.get(PROFILE_FIELD_EXPLICIT) or []:
@@ -169,13 +186,41 @@ def _render_everos_profile(data: dict[str, Any]) -> str:
         if not trait and not desc:
             continue
         tags = item.get(PROFILE_KEY_TAGS) or []
-        tag_str = f"（{ '、'.join(str(t) for t in tags) }）" if tags else ""
+        tag_str = f"（{'、'.join(str(t) for t in tags)}）" if tags else ""
         head = trait or desc
         body = f"：{desc}" if (trait and desc) else ""
         imp_lines.append(f"- {head}{tag_str}{body}")
     if imp_lines:
         blocks.append("隐含特质：\n" + "\n".join(imp_lines))
     return "\n".join(blocks)
+
+
+def _is_duplicate_summary(summary: str, data: dict[str, Any]) -> bool:
+    """summary 是否只是某条 explicit/implicit 的逐字复制（everalgo `_build_summary` 行为）。
+
+    everalgo 的 ProfileExtractor 不让 LLM 生成 summary，而是用代码取 explicit_info[0]
+    的 description（两者皆空时取首条 implicit 的 description/trait）回填。故注入侧该
+    summary 必与某条已渲染特征逐字雷同——重复且把首印象偏置到该条。此处据此判重以跳过；
+    若 summary 与所有显式/隐含特征都不雷同（真正独立的总结），返 False 照常渲染（自愈）。
+    """
+    s = summary.strip()
+    if not s:
+        return True
+    seen: set[str] = set()
+    for item in data.get(PROFILE_FIELD_EXPLICIT) or []:
+        if isinstance(item, dict):
+            desc = (item.get(PROFILE_KEY_DESCRIPTION) or "").strip()
+            if desc:
+                seen.add(desc)
+    for item in data.get(PROFILE_FIELD_IMPLICIT) or []:
+        if isinstance(item, dict):
+            desc = (item.get(PROFILE_KEY_DESCRIPTION) or "").strip()
+            if desc:
+                seen.add(desc)
+            trait = (item.get(PROFILE_KEY_TRAIT) or "").strip()
+            if trait:
+                seen.add(trait)
+    return s in seen
 
 
 def _render_generic_dict(data: dict[str, Any]) -> str:
