@@ -32,3 +32,9 @@ deploy/.env
 # --- 操作系统 ---
 .DS_Store
 Thumbs.db
+
+# --- 本地数据 dump / 草稿（真实用户数据，绝不提交）---
+# 仓根下划线前缀的文件/目录一律本地保留（转写/画像草稿/样例等）；
+# 唯一例外是插件配置 schema `_conf_schema.json`，必须跟踪。
+/_*
+!/_conf_schema.json
