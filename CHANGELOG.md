@@ -5,6 +5,8 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+> 版本系列代号 **Crepuscule**（源自莫扎特《魔笛》）；姊妹项目 Eyes of Priestess（管理 WebUI）的版本系列为 **Sarastro**。
+
 ## [v0.3.1] - 2026-06-22
 
 ### Added

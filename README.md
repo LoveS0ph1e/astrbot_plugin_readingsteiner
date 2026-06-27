@@ -6,6 +6,8 @@
 而是为每个用户维护一份随对话演进的稳定画像，并严格按真实身份隔离，绝不把 A 的记忆串到 B 头上。
 
 > 命名说明：项目名为 `astrbot_plugin_readingsteiner`；底层记忆能力由独立部署的 EverOS 引擎提供。
+>
+> 版本系列代号 **Crepuscule**（源自莫扎特《魔笛》）；姊妹项目 Eyes of Priestess（管理 WebUI）的版本系列为 **Sarastro**。
 
 ## 目录
 
