@@ -15,7 +15,7 @@ from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.api.star import Context, Star, StarTools, register
 
 from .commands import handlers
-from .core import archiving, injection, relationship, synthesis, visibility
+from .core import archiving, forget, injection, relationship, synthesis, visibility
 from .core import identity as identity_mod
 from .core.constants import (
     ARCHIVE_AUTO,
@@ -61,6 +61,12 @@ class ReadingSteinerPlugin(Star):
         except Exception as e:
             logger.warning(f"{LOG_PREFIX} 关系层存储初始化失败，整体印象功能禁用: {e}")
         self._synth_inflight: set[str] = set()
+        # 遗忘(抑制)层存储：每用户 forget/<id>.md，读路径据此过滤；初始化失败则禁用该功能。
+        self._forget_store: forget.ForgetStore | None = None
+        try:
+            self._forget_store = forget.ForgetStore(str(StarTools.get_data_dir()))
+        except Exception as e:
+            logger.warning(f"{LOG_PREFIX} 遗忘层存储初始化失败，遗忘功能禁用: {e}")
 
     # ────────────────── 生命周期 ──────────────────
 
@@ -236,6 +242,14 @@ class ReadingSteinerPlugin(Star):
                 covenant = ""
             else:
                 covenant = injection.resolve_covenant(self.config, ident.user_id)
+            # 记忆遗忘(抑制)：必须在 filter_public 之后、overall_impression 之前过滤——
+            # profile_source_hash 只 hash explicit+implicit，先过滤才能让整体印象既不重复合成、
+            # 又不含已遗忘事实。forget_all 用户直接早退，本轮不注入任何记忆(连铭契一并抑制)。
+            if self.config.get("enable_forget", True) and self._forget_store is not None:
+                fstate = self._forget_store.get(ident.user_id)
+                if fstate and fstate.forget_all:
+                    return
+                profiles, episodes = forget.apply_forget(profiles, episodes, fstate)
             # 整体印象：仅非群聊（群聊连同私密一并抑制）且开启时注入；画像变化时后台刷新。
             overall_impression = ""
             if (
@@ -274,6 +288,11 @@ class ReadingSteinerPlugin(Star):
                 return
             if not await self._healthy():
                 return
+            # forget_all 用户：opt-out，不归档(可逆)。
+            if self.config.get("enable_forget", True) and self._forget_store is not None:
+                fstate = self._forget_store.get(ident.user_id)
+                if fstate and fstate.forget_all:
+                    return
             user_text = event.message_str or ""
             assistant_text = resp.completion_text or ""
             if not user_text and not assistant_text:
@@ -351,9 +370,9 @@ class ReadingSteinerPlugin(Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @epk_group.command("forget")  # type: ignore
-    async def epk_forget(self, event: AstrMessageEvent, confirm: str | None = None):
-        """[管理员] 删除当前用户记忆 /epk forget [confirm]"""
-        async for r in handlers.forget_impl(self, event, confirm):
+    async def epk_forget(self, event: AstrMessageEvent, args: str = ""):
+        """[管理员] 遗忘(抑制)当前用户记忆 /epk forget [all|clear|<描述>]"""
+        async for r in handlers.forget_impl(self, event, args):
             yield r
 
     @epk_group.command("help")  # type: ignore

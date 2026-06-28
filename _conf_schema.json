@@ -115,6 +115,12 @@
     "type": "bool",
     "default": true
   },
+  "enable_forget": {
+    "description": "启用记忆遗忘（抑制）",
+    "hint": "管理员 /epk forget 在注入/召回读路径抑制匹配到的记忆（数据仍在 EverOS，只是不再被注入/召回），可逆；支持按内容短语或整用户 opt-out。关闭则忽略所有遗忘规则。真正从磁盘擦除需在 EverOS 侧操作",
+    "type": "bool",
+    "default": true
+  },
   "eternal_covenant": {
     "description": "永恒铭契（ETERNAL_COVENANT）：为指定用户锁定的不变核心设定",
     "hint": "JSON：{\"<QQ号>\": \"<固定核心设定文本>\"}。注入时作为【永恒铭契】块置于演进画像之上，永不被 EverOS 的 flush 重写覆盖；EverOS 自动提取的 summary/显式/隐式不受影响、继续演进。含私密内容时群聊默认不注入（受 group_public_only 约束）",

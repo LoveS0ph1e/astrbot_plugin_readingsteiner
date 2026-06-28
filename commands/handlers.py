@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..core import archiving, injection, profile_quality, visibility
+from ..core import archiving, forget, injection, profile_quality, visibility
 from ..core import identity as identity_mod
 from ..core.constants import LOG_PREFIX, MEMORY_TYPE_EPISODE, MEMORY_TYPE_PROFILE
 from ..core.everos_client import EverOSUnavailable
@@ -109,20 +109,84 @@ async def flush_impl(plugin, event: AstrMessageEvent):
         yield event.plain_result(f"{LOG_PREFIX} flush failed: {e}")
 
 
-async def forget_impl(plugin, event: AstrMessageEvent, confirm: str | None = None):
-    """[管理员] /epk forget [confirm]：删除当前用户记忆。
+async def forget_impl(plugin, event: AstrMessageEvent, args: str = ""):
+    """[管理员] /epk forget [all|clear|<描述>]：遗忘(抑制)当前用户的记忆。
 
-    ⚠️ 诚实边界：EverOS v1 API 仅 add/flush/get/search 四个端点，无删除端点。
-    故本命令无法经 API 删除记忆，只能如实告知正确做法：EverOS 记忆是磁盘上的
-    markdown，删除需在 EverOS 侧操作。
+    插件侧抑制：在注入/召回读路径过滤掉匹配的记忆——数据仍在 EverOS，只是不再被召回/注入。
+    身份只从 event 解析(铁律)，作用于调用者本人。子命令：
+    - 无参：列出当前遗忘规则 + 用法。
+    - all：整用户 opt-out(此后不注入、不归档，可逆)。
+    - clear / undo / reset：清空该用户全部遗忘规则。
+    - 其余：作为遗忘短语加入(按内容抑制匹配条目)。
+    真正从磁盘擦除需在 EverOS 侧操作(EverOS v1 无 HTTP 删除端点)。
     """
-    yield event.plain_result(
-        f"{LOG_PREFIX} EverOS v1 API has no delete endpoint; the plugin cannot delete memories.\n"
-        "EverOS stores memories as markdown in its data dir "
-        "(default ~/.everos or container /data/everos). To delete, remove the md files under "
-        "the user's dir on the EverOS side, then rebuild the index (.index/ is rebuildable).\n"
-        "See the EverOS official storage_layout docs."
-    )
+    if not plugin.config.get("enable_forget", True):
+        yield event.plain_result(f"{LOG_PREFIX} Forget feature is disabled (enable_forget=false).")
+        return
+    ident = identity_mod.resolve(event, plugin.config)
+    if ident is None:
+        yield event.plain_result(f"{LOG_PREFIX} Cannot resolve identity.")
+        return
+    store = getattr(plugin, "_forget_store", None)
+    if store is None:
+        yield event.plain_result(f"{LOG_PREFIX} Forget feature is unavailable (store init failed).")
+        return
+    uid = ident.user_id
+    sub = (args or "").strip()
+    low = sub.lower()
+    try:
+        if not sub:
+            yield event.plain_result(_format_forget_status(uid, store.get(uid)))
+            return
+        if low == "all":
+            store.set_forget_all(uid, True)
+            yield event.plain_result(
+                f"{LOG_PREFIX} Opt-out set for user {uid}: this user's memories will no longer "
+                "be injected or archived. Reversible with /epk forget clear."
+            )
+            return
+        if low in ("clear", "undo", "reset"):
+            existed = store.clear(uid)
+            yield event.plain_result(
+                f"{LOG_PREFIX} Forget rules cleared for user {uid}."
+                if existed
+                else f"{LOG_PREFIX} No forget rules to clear for user {uid}."
+            )
+            return
+        if len(forget.normalize(sub)) < forget.MIN_PHRASE_LEN:
+            yield event.plain_result(
+                f"{LOG_PREFIX} Phrase too short (need >= {forget.MIN_PHRASE_LEN} chars after "
+                "normalization); nothing changed."
+            )
+            return
+        added = store.add_phrase(uid, sub)
+        if added:
+            yield event.plain_result(
+                f"{LOG_PREFIX} Will suppress memories matching “{sub}” for user {uid} "
+                "(filtered from recall/injection; data stays in EverOS — true on-disk "
+                "erasure needs EverOS-side ops). Undo with /epk forget clear."
+            )
+        else:
+            yield event.plain_result(
+                f"{LOG_PREFIX} “{sub}” is already in the forget list; nothing changed."
+            )
+    except forget.ForgetStoreError as e:
+        yield event.plain_result(f"{LOG_PREFIX} Forget failed: {e}")
+
+
+def _format_forget_status(user_id: str, state: forget.ForgetState | None) -> str:
+    """无参 /epk forget 的回显：当前 forget_all/短语清单 + 用法 + 真擦除提示。"""
+    lines = [f"{LOG_PREFIX} Forget rules for user {user_id}:"]
+    if state is None or (not state.forget_all and not state.phrases):
+        lines.append("  (none)")
+    else:
+        if state.forget_all:
+            lines.append("  - forget_all: ON (no injection, no archiving)")
+        for p in state.phrases:
+            lines.append(f"  - phrase: {p}")
+    lines.append("Usage: /epk forget <text> | all | clear")
+    lines.append("Note: suppression only; on-disk erasure needs EverOS-side ops.")
+    return "\n".join(lines)
 
 
 async def quality_impl(plugin, event: AstrMessageEvent):
@@ -191,6 +255,14 @@ async def recall_impl(plugin, event: AstrMessageEvent, query: str) -> str:
     episodes = data.get("episodes", []) or []
     if plugin.config.get("group_public_only", True) and ident.is_group:
         profiles, episodes = visibility.filter_public(profiles, episodes)
+    # 记忆遗忘(抑制)：闭合 LLM 工具泄露面——recall_impl 也是 epk_recall 工具的后端，
+    # 不接 forget 则 forget_all 用户仍可被模型经工具召回。
+    store = getattr(plugin, "_forget_store", None)
+    if plugin.config.get("enable_forget", True) and store is not None:
+        fstate = store.get(ident.user_id)
+        if fstate and fstate.forget_all:
+            return "No stored memory available for this user."
+        profiles, episodes = forget.apply_forget(profiles, episodes, fstate)
     text = injection.build_text(profiles, episodes, plugin.config)
     return text or "No stored memory found for this user yet."
 
@@ -230,5 +302,5 @@ async def help_impl(plugin, event: AstrMessageEvent):
         "/epk status        Connection status, current identity, memory counts\n"
         "/epk search <q>    Search memories for the current user (debug)\n"
         "/epk quality       Spot-check the current user's profile quality\n"
-        "/epk forget        Memory deletion notice (API unsupported, see message)"
+        "/epk forget [all|clear|<text>]  Suppress this user's memories (admin)"
     )
