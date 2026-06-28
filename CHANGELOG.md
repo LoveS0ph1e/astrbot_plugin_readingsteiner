@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-06-28
+
 ### Added
 - **记忆遗忘（抑制）**：新增管理员命令 `/epk forget`，在注入/召回读路径上抑制匹配到的记忆——
   数据仍在 EverOS，只是不再被注入/召回，可逆。两种粒度：按内容短语 `/epk forget <描述>`
@@ -20,6 +22,16 @@
 - `/epk forget` 从「打印『API 无删除端点』的诚实桩」升级为真正的读路径抑制（见上）。
   注：EverOS v1 API 仍无删除端点、插件也不共享其文件系统，故这是「遗忘(抑制)」而非磁盘
   擦除；真正从磁盘删除仍需在 EverOS 侧操作。
+
+### Fixed
+- **群聊跨用户记忆串线（按发送者隔离会话）**：群聊中所有成员此前共用同一引擎会话键，导致
+  多人对话被合并、按发送者抽取时把他人 / 助手的内容混入某用户画像（认错人、张冠李戴、把助手
+  人设当成用户）。现群聊会话键按发送者拆分（在 `unified_msg_origin` 后追加 `#<user_id>`），每个
+  成员独立会话，从源头杜绝跨用户混合记忆单元。私聊不受影响（其会话标识本就含 user_id）。
+- **相关情景记忆注入半句截断**：注入的【相关情景记忆】此前优先取引擎的情景 `summary`，而该字段
+  在未独立产出时为 `content` 的字符级硬截，常在句中斩断。现改用完整 `content` 按句末标点收束
+  （中英双语：中文句末标点 + 后接空白 / 引号的英文 `.!?`），完整句注入、绝不留半截；`content`
+  缺失才回退 `summary` / `subject`。
 
 ## [v0.3.1] - 2026-06-22
 
@@ -73,7 +85,8 @@
 - 自动注入（on_llm_request）与自动归档（on_llm_response）钩子。
 - 群聊默认仅注入公开层信息（`group_public_only`），保护用户隐私。
 
-[Unreleased]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/compare/v0.4.0...HEAD
+[v0.4.0]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.4.0
 [v0.3.1]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.3.1
 [v0.3.0]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.3.0
 [v0.2.0]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.2.0
