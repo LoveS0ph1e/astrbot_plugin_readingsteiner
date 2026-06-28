@@ -7,6 +7,20 @@
 
 > 版本系列代号 **Crepuscule**（源自莫扎特《魔笛》）；姊妹项目 Eyes of Priestess（管理 WebUI）的版本系列为 **Sarastro**。
 
+## [Unreleased]
+
+### Added
+- **记忆遗忘（抑制）**：新增管理员命令 `/epk forget`，在注入/召回读路径上抑制匹配到的记忆——
+  数据仍在 EverOS，只是不再被注入/召回，可逆。两种粒度：按内容短语 `/epk forget <描述>`
+  （滤掉匹配的画像条目/情景）与整用户 `/epk forget all`（opt-out：不注入、不归档）；
+  `/epk forget clear` 撤销，无参列出当前规则。受 `enable_forget`（默认开）控制。身份只取自
+  消息发送者、作用于调用者本人；每用户规则存于 `forget/<user_id>.md`。
+
+### Changed
+- `/epk forget` 从「打印『API 无删除端点』的诚实桩」升级为真正的读路径抑制（见上）。
+  注：EverOS v1 API 仍无删除端点、插件也不共享其文件系统，故这是「遗忘(抑制)」而非磁盘
+  擦除；真正从磁盘删除仍需在 EverOS 侧操作。
+
 ## [v0.3.1] - 2026-06-22
 
 ### Added
@@ -59,6 +73,7 @@
 - 自动注入（on_llm_request）与自动归档（on_llm_response）钩子。
 - 群聊默认仅注入公开层信息（`group_public_only`），保护用户隐私。
 
+[Unreleased]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/compare/v0.3.1...HEAD
 [v0.3.1]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.3.1
 [v0.3.0]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.3.0
 [v0.2.0]: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner/releases/tag/v0.2.0
