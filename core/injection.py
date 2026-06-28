@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -235,15 +236,57 @@ def _render_generic_dict(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# 单条情景记忆注入的字数上限（按句末标点收束，绝不在句中截断）。
+EPISODE_INJECT_MAX_CHARS = 200
+_CJK_SENT = "。！？…"  # 中文句末标点
+_CLAUSE_END = "；;，,、"  # 子句边界（退而求其次）
+# 英文句末 . ! ? —— 须后接空白/引号/括号/结尾，避免误切在小数(3.5)、缩写(U.S.)中。
+_ASCII_SENT = re.compile(r"[.!?](?=[\s\"')\]]|$)")
+
+
+def _clip_to_sentence(text: str, max_chars: int) -> str:
+    """超长文本在句末标点处收束（退而求其次到子句边界），绝不在句中硬切。中英双语。
+
+    ≤max_chars 原样返回；否则在 [:max_chars] 窗口内回退到最后一个句末标点（中文标点，或后接
+    空白/引号的英文 .!?）；无则回退子句标点；再无则原窗口——保证返回完整句/子句，不留半截。
+    """
+    s = text.strip()
+    if len(s) <= max_chars:
+        return s
+    window = s[:max_chars]
+    cut = max((window.rfind(c) for c in _CJK_SENT), default=-1)
+    for m in _ASCII_SENT.finditer(window):
+        cut = max(cut, m.start())
+    if cut < 0:
+        cut = max((window.rfind(c) for c in _CLAUSE_END), default=-1)
+    return (window[: cut + 1] if cut >= 0 else window).rstrip()
+
+
+def _episode_text(ep: dict[str, Any], max_chars: int = EPISODE_INJECT_MAX_CHARS) -> str:
+    """取该 episode 的一段干净代表文本（完整句）。
+
+    ⚠️ EverOS 的 episode `summary` 实为 `content[:200]` 的字符级硬截（其 episode 抽取 prompt
+    不产 summary 字段），实测约八成在句中斩断。故不盲取 summary：优先用完整 `content` 按句末
+    标点收束，保证每条都是完整句；content 缺失才回退 summary（同样按句收束），再回退 subject。
+    """
+    content = str(ep.get("content") or "").strip()
+    if content:
+        return _clip_to_sentence(content, max_chars)
+    summary = str(ep.get("summary") or "").strip()
+    if summary:
+        return _clip_to_sentence(summary, max_chars)
+    return str(ep.get("subject") or "").strip()
+
+
 def _render_episodes(episodes: list[dict[str, Any]]) -> str:
-    """每条取 timestamp + summary（或 subject）。无 summary 的跳过。"""
+    """每条渲染为「- [时间] 完整句」；空内容跳过。文本选取与收束见 _episode_text。"""
     lines: list[str] = []
     for ep in episodes:
-        text = ep.get("summary") or ep.get("subject") or ep.get("content")
+        text = _episode_text(ep)
         if not text:
             continue
         ts = _fmt_time(ep.get("timestamp"))
-        lines.append(f"- [{ts}] {str(text).strip()}" if ts else f"- {str(text).strip()}")
+        lines.append(f"- [{ts}] {text}" if ts else f"- {text}")
     return "\n".join(lines)
 
 

@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from core.injection import build_text, inject, resolve_covenant
+from core.injection import (
+    _clip_to_sentence,
+    _episode_text,
+    build_text,
+    inject,
+    resolve_covenant,
+)
 
 
 class FakeReq:
@@ -139,6 +145,55 @@ def test_build_text_episodes_with_time():
     assert "【相关情景记忆】" in text
     assert "循环 Aimer 新专辑" in text
     assert "2024-05-28" in text  # 毫秒时间戳被格式化
+
+
+def test_episode_prefers_full_content_over_truncated_summary():
+    """EverOS 的 episode summary 实为 content[:200] 句中硬截；注入应改用完整 content（按句收束），
+    绝不注入半句。这是「相关情景记忆暴力截断」的回归。"""
+    content = "用户去看了 Aimer 的演唱会。返场时全场合唱，气氛热烈到落泪。散场后仍在回味。"
+    # summary 模拟引擎 content[:N] 的句中硬截（结尾无句末标点）
+    summary = "用户去看了 Aimer 的演唱会。返场时全场合唱，气氛热烈到落"
+    ep = {"timestamp": 1716885133000, "content": content, "summary": summary}
+    text = build_text([], [ep], None)
+    line = next(ln for ln in text.splitlines() if ln.startswith("- ["))
+    assert line.rstrip().endswith("。")  # 完整句收尾
+    assert "散场后仍在回味" in line  # 用了完整 content
+    assert not line.rstrip().endswith("气氛热烈到落")  # 不是 summary 的半句
+
+
+def test_episode_long_content_clipped_at_sentence():
+    """长 content 在句末标点处收束，绝不句中截断。"""
+    out = _episode_text({"content": "甲乙丙丁戊。" * 50}, max_chars=20)
+    assert len(out) <= 20
+    assert out.endswith("。")
+    assert out == "甲乙丙丁戊。" * 3  # 取整句、不留半截（3 句 18 字 ≤ 20）
+
+
+def test_episode_fallback_content_then_summary_then_subject():
+    """content 优先；缺则 summary（按句收束）；再缺则 subject；皆空 → ''。"""
+    full = {"content": "有完整内容。", "summary": "S", "subject": "T"}
+    assert _episode_text(full) == "有完整内容。"
+    assert _episode_text({"summary": "只有摘要。", "subject": "T"}) == "只有摘要。"
+    assert _episode_text({"subject": "只有标题"}) == "只有标题"
+    assert _episode_text({}) == ""
+
+
+def test_clip_to_sentence_boundaries():
+    assert _clip_to_sentence("短句无需截。", 200) == "短句无需截。"  # ≤上限原样
+    assert _clip_to_sentence("一。二。三。", 4) == "一。二。"  # 句末标点处收束
+    assert _clip_to_sentence("一，二，三，四", 4) == "一，二，"  # 无句末→退到子句边界
+    assert _clip_to_sentence("无任何标点的长串文本", 4) == "无任何标"  # 无任何边界→原窗口
+    # 英文：. 后接空白才算句末（避免误切小数/缩写）
+    assert _clip_to_sentence("First sentence. Second one. Third.", 20) == "First sentence."
+    # 小数点(3.5)不被当句末 → 退到子句逗号边界
+    assert _clip_to_sentence("收益约 3.5 倍，相当可观，后续仍看好。", 12) == "收益约 3.5 倍，"
+
+
+def test_episode_english_content_clipped_at_sentence():
+    """英文 episode content 按英文句末 . 收束，不退化成逗号半句（双语回归）。"""
+    content = "The user woke up. The assistant evaluated the meal, noting it was fine. Done."
+    out = _episode_text({"content": content}, max_chars=40)
+    assert out == "The user woke up."  # 切在英文句号、完整句
 
 
 def test_inject_system_prepend():
