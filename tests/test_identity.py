@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from core.identity import resolve
+from core.identity import GROUP_SESSION_SEP, resolve
 
 
 class FakeEvent:
@@ -76,3 +76,38 @@ def test_no_whitelist_skips_persona():
     """白名单为空（默认）→ 永远共享 base，不查人格。"""
     e = FakeEvent(sender_id="1", persona_name="任意")
     assert resolve(e, {"app_id": "bot"}).app_id == "bot"
+
+
+def test_group_session_split_by_sender():
+    """铁律4：群聊 session_id 追加 #user_id，按发送者拆分会话缓冲。"""
+    e = FakeEvent(sender_id="111", group_id="G", umo="qq:GroupMessage:G")
+    ident = resolve(e, None)
+    assert ident.is_group is True
+    assert ident.session_id == f"qq:GroupMessage:G{GROUP_SESSION_SEP}111"
+
+
+def test_private_session_unchanged():
+    """私聊 session_id 原样取 unified_msg_origin（本含 user_id、天然单人，不加后缀）。"""
+    e = FakeEvent(sender_id="111", umo="qq:FriendMessage:111")
+    ident = resolve(e, None)
+    assert ident.is_group is False
+    assert ident.session_id == "qq:FriendMessage:111"
+    assert GROUP_SESSION_SEP not in ident.session_id
+
+
+def test_group_two_senders_distinct_sessions():
+    """同群两个发送者 → 不同 session_id（防跨用户混合 memcell 的命门回归）。"""
+    umo = "qq:GroupMessage:G"
+    a = resolve(FakeEvent(sender_id="111", group_id="G", umo=umo), None)
+    b = resolve(FakeEvent(sender_id="222", group_id="G", umo=umo), None)
+    assert a.session_id != b.session_id
+    assert a.session_id.endswith(f"{GROUP_SESSION_SEP}111")
+    assert b.session_id.endswith(f"{GROUP_SESSION_SEP}222")
+
+
+def test_group_same_sender_stable_session():
+    """同群同发送者 → 同 session_id（保证 flush/轮数计数与缓冲连续性）。"""
+    umo = "qq:GroupMessage:G"
+    a = resolve(FakeEvent(sender_id="111", group_id="G", umo=umo), None)
+    b = resolve(FakeEvent(sender_id="111", group_id="G", umo=umo), None)
+    assert a.session_id == b.session_id

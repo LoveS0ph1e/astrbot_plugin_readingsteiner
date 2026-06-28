@@ -4,11 +4,15 @@
 # 铁律 1：user_id 必须来自 event 的真实发送者 QQ 号，不接受外部/LLM 传参。
 # 铁律 2：取不到有效 user_id 时返回 None，调用方跳过记忆——绝不回退 "default"。
 # 铁律 3：检索只用单一 user_id，绝不轮询 [uid, "default"]。
+# 铁律 4：群聊必须按发送者拆分 EverOS 会话键（session_id 追加 #user_id）。群聊的
+#         unified_msg_origin 由全群共享，直接拿来当会话键，会把所有成员的轮次灌进
+#         同一缓冲、被 EverOS 跨发送者切成混合 memcell，导致画像/episode 跨用户串线
+#         与机器人人设倒灌。私聊 UMO 本含 user_id、天然单人，保持原样。
 # ═══════════════════════════════════════════════════════════════════════
 
 身份取值全部基于 AstrBot 官方方法：
 - user_id   = event.get_sender_id()        （QQ 号）
-- session_id= event.unified_msg_origin     （会话唯一标识）
+- session_id= event.unified_msg_origin（私聊原样；群聊再按发送者拆，见 resolve 与铁律4）
 - is_group  = event.get_group_id() != ""   （私聊返 ""）
 - bot_id    = event.get_self_id()          （assistant sender_id）
 
@@ -30,12 +34,17 @@ if TYPE_CHECKING:  # 仅类型检查时引入，运行时不依赖 AstrBot（便
     from astrbot.api.event import AstrMessageEvent
 
 
+# 群聊会话键的发送者分隔符：群聊 session_id = f"{unified_msg_origin}{GROUP_SESSION_SEP}{user_id}"
+# （铁律 4）。取 "#" 是因为 unified_msg_origin 用 ":" 分段、不含 "#"，拼接后仍可唯一反解。
+GROUP_SESSION_SEP = "#"
+
+
 @dataclass(frozen=True)
 class Identity:
     """从 event 确定性解析出的 EverOS 身份。"""
 
     user_id: str  # 发送者 QQ 号（EverOS sender_id/user_id 索引键）
-    session_id: str  # = event.unified_msg_origin
+    session_id: str  # EverOS 会话键：私聊=unified_msg_origin；群聊=f"{UMO}#{user_id}"（铁律4）
     app_id: str  # 含人格隔离后缀（若在白名单）
     project_id: str
     is_group: bool
@@ -60,8 +69,12 @@ def resolve(event: AstrMessageEvent, config=None) -> Identity | None:
     user_id = event.get_sender_id()
     if not user_id:  # 铁律 2：取不到不兜底，返回 None 让调用方跳过
         return None
-    session_id = event.unified_msg_origin
     is_group = event.get_group_id() != ""  # 私聊 get_group_id 返 ""
+    # 铁律 4：群聊按发送者拆分会话键，杜绝跨用户混合 memcell（详见模块顶注）。
+    # 私聊 unified_msg_origin 本含 user_id、天然单人，原样使用。
+    session_id = str(event.unified_msg_origin)
+    if is_group:
+        session_id = f"{session_id}{GROUP_SESSION_SEP}{user_id}"
     app_id = _resolve_app_id(event, config)
     project_id = _cfg(config, "project_id", DEFAULT_PROJECT_ID)
     bot_id = event.get_self_id() or ASSISTANT_SENDER_ID
