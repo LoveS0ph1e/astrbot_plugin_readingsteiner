@@ -127,6 +127,12 @@
     "type": "bool",
     "default": true
   },
+  "inject_user_attribution": {
+    "description": "注入记忆块打用户归属标签",
+    "hint": "在注入的记忆块首行写 `user: <QQ号>`，声明整块归属当前对话者，供人格身份锚定(§11)校验，消除群聊张冠李戴（认错人/串记忆）。本插件只注入当前用户本人记忆，故标签恒等于当前对话者。关闭则不打标签",
+    "type": "bool",
+    "default": true
+  },
   "enable_forget": {
     "description": "启用记忆遗忘（抑制）",
     "hint": "管理员 /epk forget 在注入/召回读路径抑制匹配到的记忆（数据仍在 EverOS，只是不再被注入/召回），可逆；支持按内容短语或整用户 opt-out。关闭则忽略所有遗忘规则。真正从磁盘擦除需在 EverOS 侧操作",

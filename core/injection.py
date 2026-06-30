@@ -74,9 +74,13 @@ def build_text(
     config=None,
     covenant: str = "",
     overall_impression: str = "",
+    user_id: str = "",
 ) -> str:
-    """拼装注入文本（永恒铭契 + 画像段 + 情景段）。都为空返回 ''（调用方据此跳过注入）。
+    """拼装注入文本（归属头 + 永恒铭契 + 画像段 + 情景段）。都为空返回 ''（调用方据此跳过注入）。
 
+    - user_id：当前对话者真实身份（QQ 号）。非空则在块首打一行归属声明 `user: <id>`——本插件只
+      检索/注入该用户本人的记忆，故整块均归属此人。人格身份锚定（persona §11）据此可按
+      `user == <<CURRENT_USER>>` 确信采纳，消除「无标签 → 猜归属」导致的群聊张冠李戴。
     - covenant：永恒铭契（人工锁定的不变核心设定），非空则作首块，置于演进画像之上
     - overall_impression：插件合成的「k_makise 视角整体印象」。非空则作画像段的
       「总体印象」，取代 EverOS 的伪 summary（everalgo `_build_summary` 的 explicit[0] 复制）。
@@ -98,7 +102,11 @@ def build_text(
             parts.append("【相关情景记忆】\n" + rendered)
     if not parts:
         return ""
-    return f"{prefix}\n" + "\n\n".join(parts) + f"\n{suffix}"
+    # §11 身份归属头：声明整块记忆均归属当前用户（本插件只注入其本人记忆），
+    # 供人格身份锚定校验，消除「无标签 → 猜归属」的群聊张冠李戴。
+    uid = str(user_id).strip()
+    owner = f"user: {uid}  （本块记忆条目均归属此用户）\n" if uid else ""
+    return f"{prefix}\n{owner}" + "\n\n".join(parts) + f"\n{suffix}"
 
 
 def inject(

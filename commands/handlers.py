@@ -313,7 +313,12 @@ async def recall_impl(plugin, event: AstrMessageEvent, query: str) -> str:
         if fstate and fstate.forget_all:
             return "No stored memory available for this user."
         profiles, episodes = forget.apply_forget(profiles, episodes, fstate)
-    text = injection.build_text(profiles, episodes, plugin.config)
+    text = injection.build_text(
+        profiles,
+        episodes,
+        plugin.config,
+        user_id=ident.user_id if plugin.config.get("inject_user_attribution", True) else "",
+    )
     return text or "No stored memory found for this user yet."
 
 

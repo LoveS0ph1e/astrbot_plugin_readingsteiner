@@ -278,3 +278,16 @@ def test_build_text_no_covenant_no_block():
     profiles = [{"profile_data": {"summary": "用户最近迷上爬山"}}]
     assert "【永恒铭契】" not in build_text(profiles, [], None)
     assert "【永恒铭契】" not in build_text(profiles, [], None, covenant="")
+
+
+def test_build_text_user_attribution_header():
+    """§11 归属：传 user_id → 块首行打 `user: <id>` 归属声明；不传则无（向后兼容）。"""
+    profiles = [{"profile_data": {"summary": "用户最近迷上爬山"}}]
+    text = build_text(profiles, [], None, user_id="1633832122")
+    assert "user: 1633832122" in text
+    assert text.index("user: 1633832122") < text.index("【用户长期印象】")  # 归属头在画像段之前
+    assert text.startswith("<ReadingSteiner_Memory>")  # 仍在 wrapper 之内
+    # 不传 user_id → 无归属头（3 参旧调用语义不变）
+    plain = build_text(profiles, [], None)
+    assert "user: 1633832122" not in plain
+    assert "（本块记忆条目均归属此用户）" not in plain
