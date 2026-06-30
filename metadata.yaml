@@ -2,6 +2,6 @@ name: astrbot_plugin_readingsteiner
 display_name: 记忆探知之魔眼 (ReadingSteiner)
 desc: 基于 EverOS 自进化记忆引擎的 AstrBot 长期记忆插件（持久用户画像 + 按平台真实身份硬隔离）
 help: 输入 /epk help 查看指令
-version: v0.4.0
+version: v0.5.0
 author: Sethyrial
 repo: https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner

@@ -12,6 +12,7 @@ EverOS API 契约要点：
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -20,6 +21,8 @@ from .constants import (
     DEFAULT_APP_ID,
     DEFAULT_PROJECT_ID,
     DEFAULT_TIMEOUT,
+    RETRY_BACKOFF_SECONDS,
+    RETRYABLE_ERROR_CODES,
     SEARCH_METHOD_HYBRID,
 )
 
@@ -28,7 +31,33 @@ class EverOSUnavailable(Exception):
     """EverOS 不可达 / 请求失败 / 返回 error 包络。
 
     上层钩子捕获后降级（跳过记忆，不阻断对话）。
+
+    Attributes:
+        code: EverOS 1.1.0 typed `error.code`（如 NOT_FOUND / EXTERNAL_SERVICE_UNAVAILABLE）；
+              1.0.x 老包络或传输层错误（超时/连不上）时为 None。
+        status: HTTP 状态码（有响应时）；传输层错误为 None。
+        retryable: 是否值得重试（外部服务瞬时不可用 / 传输层超时；据 code 或 5xx 判定）。
     """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str | None = None,
+        status: int | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = status
+        self.retryable = retryable
+
+
+def _is_retryable(code: str | None, status: int | None) -> bool:
+    """retryable 判定：有 typed code 按 RETRYABLE_ERROR_CODES 精确判；无 code 回退 5xx 启发式。"""
+    if code is not None:
+        return code in RETRYABLE_ERROR_CODES
+    return status is not None and status >= 500
 
 
 class EverOSClient:
@@ -37,31 +66,90 @@ class EverOSClient:
     Args:
         base_url: 服务地址。同 docker 网络用 http://everos:8000；单机用 127.0.0.1:8000。
         timeout: 请求超时秒数。超时按『无记忆』降级。
+        retry_retryable: 对 retryable 错误（外部服务瞬时不可用/传输层超时）的重试次数；0=不重试。
+        retry_backoff: 重试退避基数（秒），实际退避 = backoff * 第几次。
     """
 
-    def __init__(self, base_url: str, timeout: float = DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = DEFAULT_TIMEOUT,
+        *,
+        retry_retryable: int = 0,
+        retry_backoff: float = RETRY_BACKOFF_SECONDS,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
+        # 仅对 retryable 错误重试有限次；其它错误立即抛出由上层降级。
+        self._retry_retryable = max(0, int(retry_retryable))
+        self._retry_backoff = max(0.0, float(retry_backoff))
 
     async def close(self) -> None:
         """关闭底层 httpx client，供 terminate 调用。"""
         await self._client.aclose()
 
-    async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """统一 POST：发请求 → raise_for_status → 取 data。
+    async def _post(
+        self, path: str, payload: dict[str, Any], *, timeout: float | None = None
+    ) -> dict[str, Any]:
+        """统一 POST，含 typed 错误解析与「仅 retryable」有限重试。
 
-        网络/HTTP 错误统一抛 EverOSUnavailable；error 包络也抛。
+        retryable（外部服务瞬时不可用 / 传输层超时）按 retry_retryable 次退避重试；其它错误
+        （404/参数错/永久错）立即抛出。重型/幂等敏感调用应走 _post_once 绕过重试。
+        """
+        attempts = self._retry_retryable + 1
+        for i in range(attempts):
+            try:
+                return await self._post_once(path, payload, timeout=timeout)
+            except EverOSUnavailable as e:
+                if not e.retryable or i >= attempts - 1:
+                    raise
+                if self._retry_backoff:
+                    await asyncio.sleep(self._retry_backoff * (i + 1))
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    async def _post_once(
+        self, path: str, payload: dict[str, Any], *, timeout: float | None = None
+    ) -> dict[str, Any]:
+        """单次 POST：发请求 → 解析 typed 包络 → 取 data（不重试）。
+
+        EverOS 1.1.0 错误为 {request_id, error:{code, message, ...}}，且常随非 2xx 状态返回；
+        故不在解析前 raise_for_status，先读 body 拿 error.code（区分可重试/永久），再据包络/状态
+        抛 EverOSUnavailable（带 code/status/retryable）。1.0.x 老包络（error 仅 message / 无 code）
+        与无 body 的 HTTP 错误一律安全降级。timeout 非 None 时覆盖本次 HTTP 读超时。
         """
         try:
-            resp = await self._client.post(f"{self.base_url}{path}", json=payload)
-            resp.raise_for_status()
+            kwargs: dict[str, Any] = {"json": payload}
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            resp = await self._client.post(f"{self.base_url}{path}", **kwargs)
+        except httpx.TimeoutException as e:
+            raise EverOSUnavailable(f"POST {path} 超时: {e}", retryable=True) from e
         except httpx.HTTPError as e:
-            raise EverOSUnavailable(f"POST {path} 失败: {e}") from e
-        body = resp.json()
-        if isinstance(body, dict) and "error" in body:
+            raise EverOSUnavailable(f"POST {path} 失败: {e}", retryable=True) from e
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict) and body.get("error"):
             err = body["error"]
-            msg = err.get("message", "unknown") if isinstance(err, dict) else str(err)
-            raise EverOSUnavailable(f"EverOS error @ {path}: {msg}")
+            if isinstance(err, dict):
+                code = err.get("code")
+                msg = err.get("message", "unknown")
+            else:
+                code, msg = None, str(err)
+            label = f"[{code}] " if code else ""
+            raise EverOSUnavailable(
+                f"EverOS error @ {path}: {label}{msg}",
+                code=code,
+                status=resp.status_code,
+                retryable=_is_retryable(code, resp.status_code),
+            )
+        if resp.status_code >= 400:
+            raise EverOSUnavailable(
+                f"POST {path} HTTP {resp.status_code}",
+                status=resp.status_code,
+                retryable=resp.status_code >= 500,
+            )
         return body.get("data", {}) if isinstance(body, dict) else {}
 
     async def health(self) -> bool:
@@ -200,3 +288,24 @@ class EverOSClient:
         if filters is not None:
             payload["filters"] = filters
         return await self._post("/api/v1/memory/get", payload)
+
+    async def trigger_ome(
+        self,
+        name: str,
+        *,
+        timeout: float = 120.0,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """POST /api/v1/ome/trigger：手动触发一个已注册 OME 策略并等其完成。
+
+        name 如 'reflect_episodes'（情景合并，需 EverOS≥1.1.0）。
+        返回 data {status:'ok'|'timeout', name}。
+        ⚠️ 走 _post_once（不重试，避免重复触发重型合并）；HTTP 读超时取服务端等待 timeout 之上留
+           余量，避免本地先于服务端超时而误判。EverOS<1.1.0 无该策略 → NOT_FOUND 包络 →
+           抛 EverOSUnavailable(code='NOT_FOUND')，由命令层友好提示。
+        """
+        return await self._post_once(
+            "/api/v1/ome/trigger",
+            {"name": name, "timeout": timeout, "force": force},
+            timeout=timeout + 30.0,
+        )

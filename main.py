@@ -21,6 +21,7 @@ from .core.constants import (
     ARCHIVE_AUTO,
     DEFAULT_BASE_URL,
     DEFAULT_PROJECT_ID,
+    DEFAULT_RETRY_RETRYABLE,
     INJECT_TARGET_USER,
     LOG_PREFIX,
 )
@@ -31,7 +32,7 @@ from .core.everos_client import EverOSClient, EverOSUnavailable
     "astrbot_plugin_readingsteiner",
     "Sethyrial",
     "基于 EverOS 自进化记忆引擎的长期记忆插件（持久画像 + 按身份硬隔离）",
-    "v0.4.0",
+    "v0.5.0",
     "https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner",
 )
 class ReadingSteinerPlugin(Star):
@@ -45,6 +46,7 @@ class ReadingSteinerPlugin(Star):
         self.client: EverOSClient | None = EverOSClient(
             config.get("everos_base_url", DEFAULT_BASE_URL),
             float(config.get("request_timeout", 30)),
+            retry_retryable=int(config.get("everos_retry_retryable", DEFAULT_RETRY_RETRYABLE)),
         )
         self._flush_policy: archiving.FlushPolicy | None = archiving.FlushPolicy(
             config.get("archive_strategy", ARCHIVE_AUTO),
@@ -131,6 +133,20 @@ class ReadingSteinerPlugin(Star):
             logger.warning(
                 f"{LOG_PREFIX} EverOS 不可达，本轮起跳过记忆注入与归档（对话不受影响，将惰性重试）"
             )
+
+    def _log_everos_unavailable(self, op: str, e: EverOSUnavailable) -> None:
+        """EverOS 报错的分级日志：区分可重试/永久，带 error.code 或 HTTP 状态，不刷 ERROR 栈。
+
+        仅记操作名 + code/status + EverOS 侧文案（无对话内容，无 PII）。
+        """
+        if e.code:
+            tag = e.code
+        elif e.status:
+            tag = f"HTTP{e.status}"
+        else:
+            tag = "transport"
+        kind = "可重试" if e.retryable else "永久"
+        logger.warning(f"{LOG_PREFIX} {op}跳过：EverOS {kind}错误 [{tag}] {e}")
 
     async def _auto_flush_loop(self):
         """auto 策略后台任务：周期性 flush 静默超时的会话。"""
@@ -272,6 +288,8 @@ class ReadingSteinerPlugin(Star):
                 self.config.get("injection_target", INJECT_TARGET_USER),
                 self.config.get("injection_position", "prepend"),
             )
+        except EverOSUnavailable as e:
+            self._log_everos_unavailable("注入", e)
         except Exception as e:
             logger.error(f"{LOG_PREFIX} on_llm_request 失败: {e}", exc_info=True)
 
@@ -297,11 +315,26 @@ class ReadingSteinerPlugin(Star):
             assistant_text = resp.completion_text or ""
             if not user_text and not assistant_text:
                 return
+            log_ok = self.config.get("log_archive_success", True)
             msgs = archiving.build_messages(user_text, assistant_text, ident)
-            await self.client.add(ident.session_id, msgs, ident.app_id, ident.project_id)
+            add_data = await self.client.add(ident.session_id, msgs, ident.app_id, ident.project_id)
             self._flush_policy.mark_active(ident.session_id)
+            if log_ok:
+                logger.info(
+                    f"{LOG_PREFIX} 已归档 {len(msgs)} 条消息 "
+                    f"(session={ident.session_id}, status={add_data.get('status', '?')})"
+                )
             if self._flush_policy.should_flush_now(ident.session_id):
-                await self.client.flush(ident.session_id, ident.app_id, ident.project_id)
+                flush_data = await self.client.flush(
+                    ident.session_id, ident.app_id, ident.project_id
+                )
+                if log_ok:
+                    logger.info(
+                        f"{LOG_PREFIX} flush 完成 "
+                        f"(session={ident.session_id}, status={flush_data.get('status', '?')})"
+                    )
+        except EverOSUnavailable as e:
+            self._log_everos_unavailable("归档", e)
         except Exception as e:
             logger.error(f"{LOG_PREFIX} on_llm_response 失败: {e}", exc_info=True)
 
@@ -373,6 +406,13 @@ class ReadingSteinerPlugin(Star):
     async def epk_forget(self, event: AstrMessageEvent, args: str = ""):
         """[管理员] 遗忘(抑制)当前用户记忆 /epk forget [all|clear|<描述>]"""
         async for r in handlers.forget_impl(self, event, args):
+            yield r
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @epk_group.command("reflect")  # type: ignore
+    async def epk_reflect(self, event: AstrMessageEvent):
+        """[管理员] 触发情景合并(Reflection)治碎片/过粒度 /epk reflect（需 EverOS≥1.1.0）"""
+        async for r in handlers.reflect_impl(self, event):
             yield r
 
     @epk_group.command("help")  # type: ignore

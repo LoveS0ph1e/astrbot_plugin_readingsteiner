@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING
 
 from ..core import archiving, forget, injection, profile_quality, visibility
 from ..core import identity as identity_mod
-from ..core.constants import LOG_PREFIX, MEMORY_TYPE_EPISODE, MEMORY_TYPE_PROFILE
+from ..core.constants import (
+    ERR_NOT_FOUND,
+    LOG_PREFIX,
+    MEMORY_TYPE_EPISODE,
+    MEMORY_TYPE_PROFILE,
+    OME_STRATEGY_REFLECT_EPISODES,
+)
 from ..core.everos_client import EverOSUnavailable
 
 if TYPE_CHECKING:
@@ -107,6 +113,48 @@ async def flush_impl(plugin, event: AstrMessageEvent):
         yield event.plain_result(f"{LOG_PREFIX} flush done, status={data.get('status', '?')}")
     except EverOSUnavailable as e:
         yield event.plain_result(f"{LOG_PREFIX} flush failed: {e}")
+
+
+async def reflect_impl(plugin, event: AstrMessageEvent):
+    """[管理员] /epk reflect：触发 EverOS 情景合并(Reflection)以治碎片/过粒度。
+
+    服务端维护操作（跨用户按簇运行，非按调用者本人）：把同簇碎片情景 LLM 合并成连贯叙事，
+    原件软归档(可恢复)。需 EverOS≥1.1.0；旧版无该策略 → 友好提示。有损合并，建议低频/试点。
+    """
+    if not await plugin._healthy():
+        yield event.plain_result(f"{LOG_PREFIX} EverOS not connected.")
+        return
+    if plugin.client is None:
+        yield event.plain_result(f"{LOG_PREFIX} EverOS client unavailable.")
+        return
+    yield event.plain_result(
+        f"{LOG_PREFIX} Triggering episode reflection (consolidating fragmented episodes); "
+        "this may take a while…"
+    )
+    try:
+        data = await plugin.client.trigger_ome(OME_STRATEGY_REFLECT_EPISODES, force=True)
+    except EverOSUnavailable as e:
+        if e.code == ERR_NOT_FOUND:
+            yield event.plain_result(
+                f"{LOG_PREFIX} Reflection unavailable: strategy 'reflect_episodes' not found "
+                "— needs EverOS >= 1.1.0."
+            )
+        else:
+            yield event.plain_result(f"{LOG_PREFIX} Reflection trigger failed: {e}")
+        return
+    status = str(data.get("status", "?"))
+    if status == "ok":
+        yield event.plain_result(
+            f"{LOG_PREFIX} Reflection done (status=ok). Fragmented episodes consolidated; "
+            "originals soft-archived (recoverable)."
+        )
+    elif status == "timeout":
+        yield event.plain_result(
+            f"{LOG_PREFIX} Reflection still running (status=timeout); it continues server-side. "
+            "Re-check later with /epk search."
+        )
+    else:
+        yield event.plain_result(f"{LOG_PREFIX} Reflection returned status={status}.")
 
 
 async def forget_impl(plugin, event: AstrMessageEvent, args: str = ""):
@@ -302,5 +350,6 @@ async def help_impl(plugin, event: AstrMessageEvent):
         "/epk status        Connection status, current identity, memory counts\n"
         "/epk search <q>    Search memories for the current user (debug)\n"
         "/epk quality       Spot-check the current user's profile quality\n"
-        "/epk forget [all|clear|<text>]  Suppress this user's memories (admin)"
+        "/epk forget [all|clear|<text>]  Suppress this user's memories (admin)\n"
+        "/epk reflect       Consolidate fragmented episodes (admin, EverOS>=1.1.0)"
     )

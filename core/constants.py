@@ -8,6 +8,9 @@
 DEFAULT_BASE_URL = "http://everos:8000"
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_TOP_K = 5
+# 可重试错误的默认重试次数与退避（仅作用于 retryable 错误，见 RETRYABLE_ERROR_CODES）。
+DEFAULT_RETRY_RETRYABLE = 1
+RETRY_BACKOFF_SECONDS = 0.3
 
 # ── EverOS memory_type 枚举（仅这四种）──
 # ⚠️ 不含 user_profile —— 那是其它集成方案的常见误用，本插件用 profile。
@@ -39,6 +42,15 @@ PROFILE_KEY_TAGS = "tags"
 # ── 检索方法 ──
 SEARCH_METHOD_HYBRID = "hybrid"
 SEARCH_METHODS = ("keyword", "vector", "hybrid", "agentic")
+
+# ── EverOS 1.1.0 typed error.code（错误包络 error.code；1.0.x 无 code 时按 HTTP 状态降级）──
+ERR_NOT_FOUND = "NOT_FOUND"
+ERR_EXTERNAL_SERVICE_UNAVAILABLE = "EXTERNAL_SERVICE_UNAVAILABLE"
+# 仅「外部服务瞬时不可用」值得重试；CAPABILITY_UNAVAILABLE 同为 503 但不可重试，故按 code 精确判定。
+RETRYABLE_ERROR_CODES = frozenset({ERR_EXTERNAL_SERVICE_UNAVAILABLE})
+
+# ── OME 策略名（POST /api/v1/ome/trigger；reflect_episodes=情景合并，需 EverOS≥1.1.0）──
+OME_STRATEGY_REFLECT_EPISODES = "reflect_episodes"
 
 # ── 注入标签默认值（插件专属，勿与 Mnemosyne 的 <Mnemosyne> 撞）──
 DEFAULT_MEMORY_PREFIX = "<ReadingSteiner_Memory>"

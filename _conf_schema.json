@@ -11,6 +11,18 @@
     "type": "int",
     "default": 90
   },
+  "everos_retry_retryable": {
+    "description": "可重试错误的重试次数",
+    "hint": "仅对 EverOS 瞬时不可用（503 EXTERNAL_SERVICE_UNAVAILABLE / 传输层超时）做有限退避重试；其它错误（404/参数错等）不重试，直接降级。0=关闭重试。需 EverOS≥1.1.0 才有 typed error.code，旧版按 5xx 兜底判定",
+    "type": "int",
+    "default": 1
+  },
+  "log_archive_success": {
+    "description": "归档/flush 成功打 INFO 日志",
+    "hint": "开后每次成功 add/flush 在日志打一条成功行（含条数/状态），便于肉眼确认记忆已存；关则仅失败时记日志",
+    "type": "bool",
+    "default": true
+  },
   "enable_injection": {
     "description": "启用自动记忆注入",
     "hint": "on_llm_request 钩子里按当前用户检索 EverOS 并注入画像+情景",

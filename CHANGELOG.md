@@ -9,6 +9,22 @@
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-06-30
+
+### Added
+- **情景合并（Reflection）触发**：新增管理员命令 `/epk reflect`，触发 EverOS 的 `reflect_episodes`
+  策略——把同簇碎片化情景由引擎 LLM 合并成连贯叙事、消解过粒度，原件软归档（可恢复）。需
+  EverOS ≥ 1.1.0；旧版无该策略时友好提示需升级。属服务端维护操作（跨用户按簇运行），有损合并、
+  建议低频 / 试点先行。
+- **归档可观测**：新增 `log_archive_success`（默认开），每次成功 `add` / `flush` 打一条 INFO
+  （含条数 / 状态），便于肉眼确认记忆已落库（此前成功为静默）。
+
+### Changed
+- **EverOS 客户端错误分级 + 有限重试**：解析 EverOS 1.1.0 的 typed `error.code` 包络，区分
+  「可重试」（503 `EXTERNAL_SERVICE_UNAVAILABLE` / 传输层超时）与「永久」错误；前者按
+  `everos_retry_retryable`（默认 1）做退避重试，后者立即降级。EverOS 报错不再打 ERROR 栈，改打
+  分级 WARNING（带 code / 状态）。完全向后兼容 EverOS 1.0.x（无 code 时按 5xx 兜底判定）。
+
 ## [v0.4.0] - 2026-06-28
 
 ### Added
