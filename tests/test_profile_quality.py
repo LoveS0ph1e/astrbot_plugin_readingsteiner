@@ -109,9 +109,7 @@ def test_score_monotonic_with_issues():
             }
         }
     )
-    dirty = check_profile(
-        {"profile_data": {"summary": "", "implicit_traits": [{"trait": "t"}]}}
-    )
+    dirty = check_profile({"profile_data": {"summary": "", "implicit_traits": [{"trait": "t"}]}})
     assert clean.score > dirty.score
 
 
@@ -134,4 +132,3 @@ def test_warn_count_in_stats():
     assert report.stats["warn_count"] >= 1
     assert report.stats["error_count"] == 0
     assert any(i.severity == SEVERITY_WARN for i in report.issues)
-

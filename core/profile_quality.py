@@ -95,9 +95,7 @@ def check_profile(profile: dict[str, Any]) -> QualityReport:
 
 def _score(issues: list[Issue]) -> int:
     """100 减去加权扣分，下限 0。"""
-    penalty = sum(
-        ERROR_PENALTY if i.severity == SEVERITY_ERROR else WARN_PENALTY for i in issues
-    )
+    penalty = sum(ERROR_PENALTY if i.severity == SEVERITY_ERROR else WARN_PENALTY for i in issues)
     return max(0, 100 - penalty)
 
 
@@ -185,5 +183,3 @@ def format_report(report: QualityReport) -> str:
         mark = "❌" if i.severity == SEVERITY_ERROR else "⚠️"
         lines.append(f"{mark} {i.message}")
     return "\n".join(lines)
-
-
