@@ -71,6 +71,13 @@ async def test_reflect_not_found_hints_version():
     assert client.calls == [(OME_STRATEGY_REFLECT_EPISODES, True)]  # 触发过，错误来自服务端
 
 
+async def test_reflect_bare_404_hints_version():
+    """1.0.x 整条 /ome/trigger 路由缺失 → 裸 404（code=None）也应提示需升级（实测 1.0.1 行为）。"""
+    client = FakeClient(exc=EverOSUnavailable("POST /api/v1/ome/trigger HTTP 404", status=404))
+    out = await _collect(reflect_impl(FakePlugin(client), FakeEvent()))
+    assert "1.1.0" in "\n".join(out)
+
+
 async def test_reflect_other_error_reports_failure():
     client = FakeClient(exc=EverOSUnavailable("boom", code="INTERNAL_ERROR", status=500))
     out = await _collect(reflect_impl(FakePlugin(client), FakeEvent()))

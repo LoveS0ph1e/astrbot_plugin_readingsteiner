@@ -134,10 +134,12 @@ async def reflect_impl(plugin, event: AstrMessageEvent):
     try:
         data = await plugin.client.trigger_ome(OME_STRATEGY_REFLECT_EPISODES, force=True)
     except EverOSUnavailable as e:
-        if e.code == ERR_NOT_FOUND:
+        if e.code == ERR_NOT_FOUND or e.status == 404:
+            # typed NOT_FOUND（1.1.0 策略未注册）或裸 404（1.0.x 整条 /ome/trigger 路由缺失）
+            # 都意味着该服务器版本不支持 Reflection——我们只调固定策略名，故 404 即版本不够。
             yield event.plain_result(
-                f"{LOG_PREFIX} Reflection unavailable: strategy 'reflect_episodes' not found "
-                "— needs EverOS >= 1.1.0."
+                f"{LOG_PREFIX} Reflection unavailable: the 'reflect_episodes' strategy / endpoint "
+                "isn't present on this server — needs EverOS >= 1.1.0."
             )
         else:
             yield event.plain_result(f"{LOG_PREFIX} Reflection trigger failed: {e}")
