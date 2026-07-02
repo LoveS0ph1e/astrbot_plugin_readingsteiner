@@ -64,12 +64,14 @@ def test_blank_response_returns_empty():
     assert _run(synthesize_impression(_exp("x"), [], chat_fn=chat, persona_name="测试人格")) == ""
 
 
-def test_clean_strips_prefix_and_takes_first_line():
+def test_clean_strips_prefix_and_merges_lines():
+    """现在允许一段（二三句），故多行不再截断，而是合并成一段（换行折空格）。"""
+
     async def chat(prompt: str) -> str:
-        return "整体印象：这是核心印象那一句\n这是多余的第二行"
+        return "整体印象：这是第一句\n这是第二句"
 
     out = _run(synthesize_impression(_exp("x"), [], chat_fn=chat, persona_name="测试人格"))
-    assert out == "这是核心印象那一句"
+    assert out == "这是第一句 这是第二句"
 
 
 def test_none_inputs_safe():

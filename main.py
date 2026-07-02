@@ -32,7 +32,7 @@ from .core.everos_client import EverOSClient, EverOSUnavailable
     "astrbot_plugin_readingsteiner",
     "Sethyrial",
     "基于 EverOS 自进化记忆引擎的长期记忆插件（持久画像 + 按身份硬隔离）",
-    "v0.5.1",
+    "v0.5.2",
     "https://github.com/LoveS0ph1e/astrbot_plugin_readingsteiner",
 )
 class ReadingSteinerPlugin(Star):
